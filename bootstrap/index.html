@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>Signing Control · Bootstrap review</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header><div class="mark">SC</div><div><p class="eyebrow">Personal infrastructure</p><h1>Signing Control</h1></div><span class="badge">Offline review · Apply disabled</span></header>
+  <main>
+    <section class="intro"><p class="eyebrow">Separate signer extension</p><h2>Review the bootstrap before anything changes.</h2><p>Prepare exact public configuration for the private signer. Each resource has its own review request. Nothing here deploys, creates credentials, reads a key, or grants approval.</p><div class="scope"><span>Existing Cloudflare account</span><code>1a799c6e699d2ef7e87398692ce3ad7b</code><span>Owner authority reference</span><code>https://control.vespoli.me</code><span>Private source repository</span><code>susanbeasles/signing_control</code></div></section>
+    <div class="workspace">
+      <section class="panel inputs"><div class="panel-heading"><span class="step">01</span><h2>Public inputs</h2></div><p class="muted">Use public IDs, immutable hashes, and the SSH <strong>public</strong> key only. Empty fields stay unresolved. Do not paste a token or private key.</p><form id="public-form" autocomplete="off"><div id="public-fields"></div><div class="button-row"><button id="compile" type="submit">Compile review plan</button><button id="reset" type="button" class="secondary">Reset inputs</button></div></form><label class="file-label" for="import">Import public configuration JSON</label><input type="file" id="import" accept="application/json,.json"><p id="status" role="status" aria-live="polite">Enter public commissioning references or compile the empty review plan.</p></section>
+      <section class="panel review"><div class="panel-heading"><span class="step">02</span><h2>Resource review</h2></div><p id="review-note" class="muted">Compile to inspect seven independent operations.</p><div id="summary" hidden><div class="digest"><span>Plan SHA-256</span><code id="plan-digest"></code></div><div class="digest"><span>Runtime configuration SHA-256</span><code id="config-digest"></code></div><h3>Required for Cloudflare feature signing</h3><ul id="blockers"></ul><h3>Additional promotion prerequisites</h3><ul id="promotion-prerequisites"></ul><div class="button-row"><button id="download-plan" type="button" class="secondary">Download plan</button><button id="download-config" type="button" class="secondary">Download public config</button></div></div><div id="operations"></div></section>
+    </div>
+    <section class="panel" id="operation-detail" hidden><div class="panel-heading"><span class="step">03</span><h2 id="operation-title"></h2></div><p>A review request is an unauthenticated intent. A future owner gate must authorize this exact operation, input, configuration, and plan digest before any provider action.</p><pre id="operation-json"></pre><button id="download-review" type="button">Download this review request</button></section>
+    <footer>Runtime remains disabled. No public signer route is introduced. Cloudflare feature signing requires independent workflow_depot producer admission, accepted policy, and signer commissioning. Promotion has separate verification, publication, and durable history requirements.</footer>
+  </main>
+  <script type="module" src="/review.mjs"></script>
+</body>
+</html>

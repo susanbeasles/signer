@@ -1,0 +1,11 @@
+node_modules
+.wrangler/
+coverage/
+dist/
+generated/
+.env
+.env.*
+*.pem
+*.key
+*.sock
+__pycache__/
