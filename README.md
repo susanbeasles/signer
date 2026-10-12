@@ -112,6 +112,9 @@ require delivery_control to deploy the signer. Shared integration orchestration
 and signing eligibility policy remain owned by workflow_depot. The Cloudflare
 Worker and isolated signing container stay in this standalone repository.
 
-The checked-in disabled configuration is a template, not a commissioned target.
-The GitHub repository is connected. Verify the existing Cloudflare target before
-configuring direct deployment; no deployment or credential change was made here.
+Pushes to `main` automatically run `.github/workflows/deploy.yml`, building and
+publishing the matching container and deploying the enabled Worker directly to
+Cloudflare. No manual sign/deploy action or delivery_control call is required.
+See [deployment setup](deployment/README.md) for the exact one-time inputs and
+verified resource blockers. The disabled `cloudflare/wrangler.jsonc` remains a
+reference template; the release command generates the enabled configuration.

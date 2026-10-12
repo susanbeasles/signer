@@ -9,3 +9,6 @@ generated/
 *.key
 *.sock
 __pycache__/
+
+.signing-deploy-*/
+image-runtime-config.json
