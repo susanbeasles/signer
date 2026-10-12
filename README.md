@@ -1,9 +1,8 @@
 # Signing Control
 
-This is the source for a dedicated Git signing service, staged for the private
-`susanbeasles/signing_control` repository. The Cloudflare Worker is named
-`signing-control`. Repository creation is managed separately; this staging
-directory does not create a repository or publish anything.
+This repository, `susanbeasles/signing_control`, owns the dedicated out-of-band
+Git signing service. Its Cloudflare Worker is named `signing-control`. The signer
+owns direct deployment of its Worker/container to Cloudflare.
 
 The service is disabled by default and has no public route. The bootstrap UI
 prepares nonsecret, digest-bound review requests for separate setup operations.
@@ -101,8 +100,7 @@ exactly one parent, current main, and one signed squash commit. Empty changes
 retire any previous integration. Durable operation IDs prevent blind signing
 retries after uncertain outcomes.
 
-This source is disabled and uncommissioned. Activation requires a repository
-remote, accepted source-PR-scoped policy and integrationIntent capability, trusted
+This source is disabled and uncommissioned. Activation requires accepted source-PR-scoped policy and integrationIntent capability, trusted
 read credentials, signer/publisher bindings, webhook installation, a configured
 candidate admission endpoint, and qualified provider protection rules. No live
 keys, secrets, deployments or protection settings were changed by this work.
@@ -115,5 +113,5 @@ and signing eligibility policy remain owned by workflow_depot. The Cloudflare
 Worker and isolated signing container stay in this standalone repository.
 
 The checked-in disabled configuration is a template, not a commissioned target.
-Connect the actual repository and existing Cloudflare target before configuring
-its direct deployment; no deployment or credential change was made here.
+The GitHub repository is connected. Verify the existing Cloudflare target before
+configuring direct deployment; no deployment or credential change was made here.
