@@ -1,0 +1,13 @@
+name: Integration validation
+on:
+  push:
+    branches: ['int/**']
+concurrency:
+  group: integration-${{ github.repository_id }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  validate:
+    uses: susanbeasles/workflow_depot/.github/workflows/validate-signing_control.yml@a430d212d3995173fa8fe4187c0132abf12546dc

@@ -1,0 +1,25 @@
+// Synthetic policy/evidence fixture adapted from reviewed repoctl tests. No keys or network.
+import assert from 'node:assert/strict';
+import {createSourceSigning,gitObjectID,sha256} from '../src/vendor/repoctl/source-signing/core.mjs';
+import {mandatoryScanCategories} from '../src/vendor/repoctl/source-signing/scans.mjs';
+import {canonical} from '../src/vendor/repoctl/ledger.mjs';
+const sha=c=>c.repeat(40),hash=c=>c.repeat(64),keyID='SHA256:'+Buffer.alloc(32,7).toString('base64').replace(/=+$/,'');
+function memory(){let data=new Map(),tail=Promise.resolve();const db={get:async k=>structuredClone(data.get(k)),put:async(k,v)=>data.set(k,structuredClone(v)),transaction(fn){const result=tail.then(async()=>{const old=structuredClone(data);try{return await fn(db);}catch(e){data=old;throw e;}});tail=result.catch(()=>{});return result;}};return db;}
+export async function fixture(providedStorage){
+ const storage=providedStorage??memory(),signatures=[],refs=new Map(),objects=new Map();let now=1000,main=sha('a'),writes=0,failRef=false,ciOK=true,hardware=true,eligible=true;
+ const config={authority:'workflow_depot',repository:'owner/project',repositoryID:7,sourceRef:'refs/heads/source',targetRef:'refs/heads/main',signerKeyID:keyID,policyDigest:hash('b')};
+ config.reviewPolicy={styleGuideDigest:hash('4'),styleGuideRevision:sha('5'),styleGuidePath:'docs/code-style-guide.md',reviewerAppID:10,reviewerInstallationID:11,reviewerActorID:12,privilegedAppIDs:[20],privilegedActorIDs:[21,22,23],allowBotApproval:true,requiresHumanReview:false};
+ config.scanPolicy={supportedLanguages:['javascript'],supportedFrameworks:['node'],requiredCategories:[...mandatoryScanCategories],sonarqubeStandardRulesetDigest:hash('3'),requiredTools:mandatoryScanCategories.map(category=>({id:category==='quality'?'sonarqube':`synthetic-${category}`,category,version:'1',rulesetDigest:hash('3'),databaseMaxAgeSeconds:100})),exemptions:[]};
+ const inventory={digest:hash('2'),complete:true,paths:['src/index.mjs','package.json'],languages:['javascript'],frameworks:['node'],manifests:['package.json']};
+ const signer={keyID,signGit:async input=>{signatures.push(structuredClone(input));return 'fixture-signature:'+sha256(input.payload);},verifyGit:async({payload,signature})=>signature==='fixture-signature:'+sha256(payload)};
+ const git={snapshot:async()=>({sourceSHA:sha('c'),sourceBaseSHA:sha('a'),mainSHA:main,treeSHA:sha('d'),historyDigest:hash('e'),retentionReference:'fixture-archive',verified:true,inventory}),main:async()=>main,source:async()=>sha('c')};
+ const policy={current:async()=>config,authorizeCandidate:async input=>({eligible,requestDigest:sha256(canonical(input)),policyDigest:config.policyDigest,signerKeyID:keyID,expiresAt:now+100})};
+ const approvalVerifier={verify:async(envelope,expected)=>{assert.equal(envelope.payload,canonical(expected));if(!hardware)throw Error('hardware revoked');return {ownerKeyID:hash('f'),hardwareVerified:true,proofDigest:hash('9'),validUntil:now+100};}};
+ const ci={verify:async input=>({verified:ciOK,requestDigest:sha256(canonical(input))})};
+ const review={verify:async input=>({verified:true,receipt:{schema:'repoctl-source-review/v1',...Object.fromEntries(['repositoryID','sourcePRNumber','sourceSHA','baseSHA','commitSHA','treeSHA','policyDigest'].map(k=>[k,input[k]])),...Object.fromEntries(['styleGuideDigest','styleGuideRevision','styleGuidePath','reviewerAppID','reviewerInstallationID','reviewerActorID'].map(k=>[k,config.reviewPolicy[k]])),methods:['deterministic-style','security-tests','evidence-review'],verdict:'approved',findings:[],humanReviewVerified:false,expiresAt:now+100}})};
+ const scans={verify:async input=>({verified:true,receipt:{schema:'repoctl-source-scans/v1',repositoryID:7,commitSHA:input.commitSHA,treeSHA:input.treeSHA,policyDigest:input.policyDigest,inventoryDigest:inventory.digest,tools:config.scanPolicy.requiredTools.map(({databaseMaxAgeSeconds,...tool})=>({...tool,status:'passed',commitSHA:input.commitSHA,inventoryDigest:inventory.digest,coveredPaths:inventory.paths,databaseUpdatedAt:now-5,completedAt:now,evidenceDigest:hash('1')}))}})};
+ const publisher={putObject:async(type,payload)=>{const id=gitObjectID(type,payload);objects.set(id,payload);return id;},readRef:async name=>refs.get(name)??null,createRef:async(name,id)=>{writes++;if(refs.has(name))throw Error('exists');refs.set(name,id);if(failRef){failRef=false;throw Error('lost response');}}};
+ const core=createSourceSigning({storage,policy,git,signer,approvalVerifier,ci,review,scans,publisher,clock:()=>now});
+ const input={repositoryID:7,sourcePR:{number:9,repositoryID:7,headSHA:sha('c')},author:'Owner <owner@example.test> 1000 +0000',committer:'Signer <signer@example.test> 1000 +0000',message:'Approved source snapshot\n',artifactIntentDigest:hash('8'),expiresAt:1200};
+ return {core,input,storage,signatures,refs,objects,config,signer,git,policy,ci,review,scans,inventory,publisher,approvalVerifier,advance:n=>now+=n,setMain:v=>main=v,setHardware:v=>hardware=v,setCI:v=>ciOK=v,setEligible:v=>eligible=v,failRef:()=>failRef=true,writes:()=>writes};
+}

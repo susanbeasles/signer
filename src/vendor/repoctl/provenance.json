@@ -1,0 +1,40 @@
+{
+  "schema": "signing-control-vendored-source/v1",
+  "sourceRepository": "susanbeasles/repoctl",
+  "baseCommit": "755028572be78780d4be7d27b14d3aef3db0555a",
+  "state": "committed-fixed-integration-implementation",
+  "files": [
+    {
+      "path": "ledger.mjs",
+      "sha256": "2159ba0e1b700c80c917f6bf6203a370de793df2994e1c45197af4f91dabde45"
+    },
+    {
+      "path": "promotion.mjs",
+      "sha256": "958fb484ffca40d437319f7d42167cc2f3156efe5ab4c071aca51552cd01e936"
+    },
+    {
+      "path": "source-signing/core.mjs",
+      "sha256": "79dd2ab7a3ce264a05cd81a741f4b25fb9cce763716e40e7fb5f3833676f7d3a"
+    },
+    {
+      "path": "source-signing/git.mjs",
+      "sha256": "4e7419d28c0d145526621d470a204ead04038ba7e89797d86cbb1f7389f29289"
+    },
+    {
+      "path": "source-signing/installed-signer.mjs",
+      "sha256": "018940cf6efd2c044d8e5616dd359cb3c7e84c3970df6823a32f6218b661004e"
+    },
+    {
+      "path": "source-signing/integration-ref.mjs",
+      "sha256": "2496671a48b955b91422a360491d117255f80ab634dcda33311c9898b32459c2"
+    },
+    {
+      "path": "source-signing/process.mjs",
+      "sha256": "6ecddfb66bb7a85906282c09ed80b1affe5c5a5fe49f194b7364cfdd1c17e0a6"
+    },
+    {
+      "path": "source-signing/scans.mjs",
+      "sha256": "dac2c51109862ed229967826da0dff9ff6bc06cf65d7139bf998e5cbf2ce326c"
+    }
+  ]
+}
