@@ -40,18 +40,20 @@ async function requestJSON(url,token,fetcher=fetch){
 }
 const runDefault=async(program,args,options)=>{try{return (await exec(program,args,{...options,encoding:'utf8',timeout:600000,maxBuffer:4194304})).stdout;}catch(error){throw Error(`Deployment command ${program==='docker'?'docker':'wrangler'} failed (exit ${Number.isInteger(error.code)?error.code:'unavailable'}); provider output withheld to protect credentials`);}};
 export async function deploy({env=process.env,root=process.cwd(),run=runDefault,readJSON=requestJSON}={}){
- need(env.GITHUB_EVENT_NAME==='push'&&env.GITHUB_REF==='refs/heads/main'&&env.GITHUB_REPOSITORY===repository&&env.GITHUB_REPOSITORY_ID==='1416201242'&&/^[a-f0-9]{40}$/.test(env.GITHUB_SHA??''),'Deployment requires a push to signing_control main');
- need(env.CLOUDFLARE_API_TOKEN,'Missing GitHub secret CLOUDFLARE_API_TOKEN');need(env.GITHUB_TOKEN,'Missing workflow GITHUB_TOKEN');need(env.SIGNING_DEPLOYMENT_JSON,'Missing repository variable SIGNING_DEPLOYMENT_JSON');
+ need(env.GITHUB_EVENT_NAME==='workflow_dispatch'&&env.GITHUB_REF==='refs/heads/main'&&env.GITHUB_REPOSITORY==='susanbeasles/delivery_control'&&env.SOURCE_REPOSITORY===repository&&env.SOURCE_REPOSITORY_ID==='1416201242'&&/^[a-f0-9]{40}$/.test(env.SOURCE_SHA??''),'Deployment requires central delivery_control and exact signing_control source');
+ const sourceSHA=env.SOURCE_SHA;
+ need(!env.OP_SERVICE_ACCOUNT_TOKEN,'Signing credentials must remain in existing Worker custody; runner uploads are forbidden');
+ need(env.CLOUDFLARE_API_TOKEN,'Missing central Cloudflare deployment credential');need(env.GITHUB_TOKEN,'Missing workflow GITHUB_TOKEN');need(env.SIGNING_DEPLOYMENT_JSON,'Missing repository variable SIGNING_DEPLOYMENT_JSON');
  let input;try{input=JSON.parse(env.SIGNING_DEPLOYMENT_JSON);}catch{throw Error('Invalid SIGNING_DEPLOYMENT_JSON configuration');}input=validateDeployment(input);
- const assertCurrentMain=async()=>{const head=await readJSON(`https://api.github.com/repos/${repository}/git/ref/heads/main`,env.GITHUB_TOKEN);need(head?.object?.sha===env.GITHUB_SHA,'Main advanced; superseded deployment refused');};
+ const assertCurrentMain=async()=>{const head=await readJSON(`https://api.github.com/repos/${repository}/git/ref/heads/main`,env.GITHUB_TOKEN);need(head?.object?.sha===sourceSHA,'Main advanced; superseded deployment refused');};
  await assertCurrentMain();
  const settingsURL=`https://api.cloudflare.com/client/v4/accounts/${accountID}/workers/scripts/signing-control/settings`;
  const previous=await readJSON(settingsURL,env.CLOUDFLARE_API_TOKEN);
  const hasSecret=previous?.success===true&&previous.result?.bindings?.some(b=>b.name==='OP_SERVICE_ACCOUNT_TOKEN'&&b.type==='secret_text');
- need(env.OP_SERVICE_ACCOUNT_TOKEN||hasSecret,'Missing OP_SERVICE_ACCOUNT_TOKEN: install the existing service-account token as a GitHub secret for initial deployment or retain the existing Cloudflare Worker secret');
+ need(hasSecret,'Missing retained Worker OP_SERVICE_ACCOUNT_TOKEN; commissioning is separately approved');
  for(const binding of input.bindings){const metadata=await readJSON(`https://api.cloudflare.com/client/v4/accounts/${accountID}/workers/scripts/${binding.service}/settings`,env.CLOUDFLARE_API_TOKEN);need(metadata?.success===true,`Missing private service for ${binding.binding}`);}
  const directory=await mkdtemp(join(root,'.signing-deploy-'));const publicImageFile=join(root,'image-runtime-config.json');let wroteImage=false;
- const wrangler=resolve(root,'node_modules/wrangler/bin/wrangler.js');const tag='signing-control:'+env.GITHUB_SHA;
+ const wrangler=resolve(root,'node_modules/wrangler/bin/wrangler.js');const tag='signing-control:'+sourceSHA;
  const common={PATH:env.PATH,LANG:'C',CI:'true',WRANGLER_SEND_METRICS:'false',CLOUDFLARE_ACCOUNT_ID:accountID,XDG_CONFIG_HOME:join(directory,'config'),DOCKER_CONFIG:join(directory,'docker')};
  // Only Wrangler receives the deploy credential. No signing token is in any child environment.
  const providerEnv={...common,CLOUDFLARE_API_TOKEN:env.CLOUDFLARE_API_TOKEN};
@@ -62,12 +64,11 @@ export async function deploy({env=process.env,root=process.cwd(),run=runDefault,
   await invoke(process.execPath,[wrangler,'containers','push',tag],true);
   const image=publishedImage(JSON.parse(await invoke('docker',['image','inspect',`registry.cloudflare.com/${accountID}/${tag}`,'--format','{{json .RepoDigests}}'])));
   const config=deploymentConfig(input,image);const configPath=join(directory,'wrangler.json');await writeFile(configPath,JSON.stringify(config),{mode:0o600});
-  const args=[wrangler,'deploy','--config',configPath,'--message','signing_control '+env.GITHUB_SHA];
-  if(env.OP_SERVICE_ACCOUNT_TOKEN){const secretPath=join(directory,'secrets.json');await writeFile(secretPath,JSON.stringify({OP_SERVICE_ACCOUNT_TOKEN:env.OP_SERVICE_ACCOUNT_TOKEN}),{mode:0o600});args.push('--secrets-file',secretPath);}
+  const args=[wrangler,'deploy','--config',configPath,'--message','signing_control '+sourceSHA];
   await assertCurrentMain();await invoke(process.execPath,args,true);
   const installed=await readJSON(settingsURL,env.CLOUDFLARE_API_TOKEN);const bindings=installed?.result?.bindings??[];
   need(installed?.success===true&&bindings.some(b=>b.name==='OP_SERVICE_ACCOUNT_TOKEN'&&b.type==='secret_text')&&bindings.some(b=>b.name==='ENABLED'&&b.text==='true')&&bindings.some(b=>b.name==='SIGNING_CONTROL_CONFIG_JSON'&&b.text===config.vars.SIGNING_CONTROL_CONFIG_JSON)&&input.bindings.every(expected=>bindings.some(b=>b.type==='service'&&b.name===expected.binding&&b.service===expected.service&&b.entrypoint===expected.entrypoint)),'Deployment readback differs; inspect provider deployment before retrying');
-  return {worker:'signing-control',commit:env.GITHUB_SHA,image};
+  return {worker:'signing-control',commit:sourceSHA,image};
  }finally{if(wroteImage)await rm(publicImageFile,{force:true});await rm(directory,{recursive:true,force:true});}
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){deploy().then(result=>console.log(JSON.stringify(result))).catch(error=>{console.error(error.message);process.exitCode=1;});}
