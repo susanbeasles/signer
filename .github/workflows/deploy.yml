@@ -10,9 +10,16 @@ concurrency:
 jobs:
   request:
     if: github.repository == 'susanbeasles/signing_control'
-    uses: susanbeasles/workflow_depot/.github/workflows/request-deployment.yml@126560f32ed6d4c09914e8b88fac39d93df4e703
+    uses: susanbeasles/workflow_depot/.github/workflows/request-app-deployment.yml@42a918f8db86f47de6b87e47a5cec5965a0cd378
     with:
       target: signing-control
-      depot_ref: 126560f32ed6d4c09914e8b88fac39d93df4e703
+      depot_ref: 42a918f8db86f47de6b87e47a5cec5965a0cd378
+      app_id: ${{ vars.DISPATCH_APP_ID }}
+      app_client_id: ${{ vars.DISPATCH_APP_CLIENT_ID }}
+      app_slug: ${{ vars.DISPATCH_APP_SLUG }}
+      installation_id: ${{ vars.DISPATCH_INSTALLATION_ID }}
+      private_key_ref: ${{ vars.DISPATCH_APP_PRIVATE_KEY_REF }}
+      approval_ref: ${{ vars.DISPATCH_APP_APPROVAL_REF }}
+      commissioned: ${{ vars.DISPATCH_APP_COMMISSIONED == 'true' }}
     secrets:
-      RELEASE_DISPATCH_TOKEN: ${{ secrets.RELEASE_DISPATCH_TOKEN }}
+      OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}

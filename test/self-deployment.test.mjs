@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 const api=await import('../deployment/deploy.mjs').catch(()=>({}));
 test('main source requests the pinned central deployment receiver without provider/signing secrets',async()=>{
  const workflow=await readFile(new URL('../.github/workflows/deploy.yml',import.meta.url),'utf8');
- assert.match(workflow,/branches: \[main\]/);assert.match(workflow,/workflow_depot\/\.github\/workflows\/request-deployment\.yml@[a-f0-9]{40}/);assert.match(workflow,/RELEASE_DISPATCH_TOKEN/);assert.doesNotMatch(workflow,/CLOUDFLARE_API_TOKEN|OP_SERVICE_ACCOUNT_TOKEN|npm run deploy/);
+ assert.match(workflow,/branches: \[main\]/);assert.match(workflow,/workflow_depot\/\.github\/workflows\/request-app-deployment\.yml@[a-f0-9]{40}/);assert.match(workflow,/DISPATCH_APP_PRIVATE_KEY_REF/);assert.match(workflow,/DISPATCH_APP_COMMISSIONED/);assert.doesNotMatch(workflow,/RELEASE_DISPATCH_TOKEN|CLOUDFLARE_API_TOKEN|npm run deploy/);
 });
 test('self deployment validates public runtime before any provider writes',()=>{
  assert.equal(typeof api.validateDeployment,'function');assert.throws(()=>api.validateDeployment({}),/configuration/);
