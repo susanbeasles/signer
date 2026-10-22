@@ -7,16 +7,17 @@ import {validateImageInputs} from '../runtime/check-image.mjs';
 import {validateInstallation,canonical} from '../cloudflare/controller.mjs';
 const exec=promisify(execFile);
 const accountID='1a799c6e699d2ef7e87398692ce3ad7b';
-const repository='susanbeasles/signing_control';
+const repository='susanbeasles/signer';
 const need=(ok,message)=>{if(!ok)throw Error(message);};
 const exact=(v,keys)=>v&&Object.getPrototypeOf(v)===Object.prototype&&Object.keys(v).sort().join()===keys.sort().join();
 const bindingNames=['SOURCE_POLICY','OWNER_HARDWARE','SOURCE_CI','SOURCE_SCANS','SOURCE_REVIEW','SOURCE_INVENTORY','SOURCE_PUBLISHER','SOURCE_READ_CREDENTIAL'];
 export function validateDeployment(input){
- need(exact(input,['schema','accountID','baseImage','nodeSHA256','setprivSHA256','imageConfig','bindings'])&&input.schema==='signing-control-deployment/v1'&&input.accountID===accountID,'Invalid SIGNING_DEPLOYMENT_JSON configuration');
+ need(exact(input,['schema','accountID','baseImage','nodeSHA256','setprivSHA256','imageConfig','bindings','signerTokenSecret'])&&input.schema==='signing-control-deployment/v1'&&input.accountID===accountID,'Invalid SIGNING_DEPLOYMENT_JSON configuration');
  need(JSON.stringify(input).length<=262144&&!/-----BEGIN (?:OPENSSH |RSA |EC )?PRIVATE KEY-----|\b(?:ops_|opsa_|github_pat_|ghp_)/.test(JSON.stringify(input)),'Deployment configuration must contain public references only');
  try{validateImageInputs({baseImage:input.baseImage,nodeSHA256:input.nodeSHA256,setprivSHA256:input.setprivSHA256,config:input.imageConfig});}catch{throw Error('Missing or invalid approved image, tool hashes, signing public key or 1Password item reference');}
  need(Array.isArray(input.bindings)&&input.bindings.length<=bindingNames.length&&new Set(input.bindings.map(b=>b.binding)).size===input.bindings.length,'Invalid private service bindings');
  for(const b of input.bindings)need(exact(b,['binding','service','entrypoint'])&&bindingNames.includes(b.binding)&&/^[a-z0-9][a-z0-9_-]{0,62}$/.test(b.service)&&b.service!=='signing-control'&&/^[A-Za-z][A-Za-z0-9_]{0,99}$/.test(b.entrypoint),'Invalid private service binding');
+ need(exact(input.signerTokenSecret,['store_id','secret_name'])&&/^[a-f0-9]{32}$/.test(input.signerTokenSecret.store_id)&&/^[A-Za-z0-9_-]{1,128}$/.test(input.signerTokenSecret.secret_name),'Reviewed signer Secrets Store reference required');
  need(input.bindings.some(b=>b.binding==='SOURCE_POLICY'),'Missing SOURCE_POLICY private service binding');
  return structuredClone(input);
 }
@@ -24,7 +25,7 @@ export function deploymentConfig(input,image){
  const approved=validateDeployment(input);
  need(new RegExp('^registry\\.cloudflare\\.com/'+accountID+'/signing-control@sha256:[a-f0-9]{64}$').test(image),'Published signer image digest missing');
  const installation={...approved.imageConfig,platform:{provider:'cloudflare-containers',imageDigest:image.split('@')[1]}};validateInstallation(installation);
- return {name:'signing-control',account_id:accountID,main:'../cloudflare/worker.mjs',compatibility_date:'2026-10-08',compatibility_flags:['nodejs_compat'],workers_dev:false,preview_urls:false,routes:[],observability:{enabled:false},services:approved.bindings,vars:{ENABLED:'true',SIGNING_CONTROL_CONFIG_JSON:canonical(installation)},durable_objects:{bindings:[{name:'SIGNING_CONTROL_STATE',class_name:'SigningControlRepository'}]},migrations:[{tag:'signing-control-v1',new_sqlite_classes:['SigningControlRepository']}],containers:[{class_name:'SigningControlRepository',image,max_instances:1,instance_type:'standard-1',scheduling_policy:'default',observability:{enabled:false}}]};
+ return {name:'signing-control',account_id:accountID,main:'../cloudflare/worker.mjs',compatibility_date:'2026-10-08',compatibility_flags:['nodejs_compat'],workers_dev:false,preview_urls:false,routes:[],observability:{enabled:false},secrets_store_secrets:[{binding:'SIGNER_SERVICE_ACCOUNT_TOKEN',...approved.signerTokenSecret}],services:approved.bindings,vars:{ENABLED:'true',SIGNING_CONTROL_CONFIG_JSON:canonical(installation)},durable_objects:{bindings:[{name:'SIGNING_CONTROL_STATE',class_name:'SigningControlRepository'}]},migrations:[{tag:'signing-control-v1',new_sqlite_classes:['SigningControlRepository']}],containers:[{class_name:'SigningControlRepository',image,max_instances:1,instance_type:'standard-1',scheduling_policy:'default',observability:{enabled:false}}]};
 }
 export function publishedImage(values){
  need(Array.isArray(values),'Published signer image digest missing');const prefix=`registry.cloudflare.com/${accountID}/signing-control@sha256:`;const matches=values.filter(v=>typeof v==='string'&&v.startsWith(prefix)&&/^[a-f0-9]{64}$/.test(v.slice(prefix.length)));
@@ -40,7 +41,7 @@ async function requestJSON(url,token,fetcher=fetch){
 }
 const runDefault=async(program,args,options)=>{try{return (await exec(program,args,{...options,encoding:'utf8',timeout:600000,maxBuffer:4194304})).stdout;}catch(error){throw Error(`Deployment command ${program==='docker'?'docker':'wrangler'} failed (exit ${Number.isInteger(error.code)?error.code:'unavailable'}); provider output withheld to protect credentials`);}};
 export async function deploy({env=process.env,root=process.cwd(),run=runDefault,readJSON=requestJSON}={}){
- need(env.GITHUB_EVENT_NAME==='workflow_dispatch'&&env.GITHUB_REF==='refs/heads/main'&&env.GITHUB_REPOSITORY==='susanbeasles/delivery_control'&&env.SOURCE_REPOSITORY===repository&&env.SOURCE_REPOSITORY_ID==='1416201242'&&/^[a-f0-9]{40}$/.test(env.SOURCE_SHA??''),'Deployment requires central delivery_control and exact signing_control source');
+ need(env.GITHUB_EVENT_NAME==='workflow_dispatch'&&env.GITHUB_REF==='refs/heads/main'&&env.GITHUB_REPOSITORY==='susanbeasles/deployer'&&env.SOURCE_REPOSITORY===repository&&env.SOURCE_REPOSITORY_ID==='1416201242'&&/^[a-f0-9]{40}$/.test(env.SOURCE_SHA??''),'Deployment requires central deployer and exact signer source');
  const sourceSHA=env.SOURCE_SHA;
  need(!env.OP_SERVICE_ACCOUNT_TOKEN,'Signing credentials must remain in existing Worker custody; runner uploads are forbidden');
  need(env.CLOUDFLARE_API_TOKEN,'Missing central Cloudflare deployment credential');need(env.GITHUB_TOKEN,'Missing workflow GITHUB_TOKEN');need(env.SIGNING_DEPLOYMENT_JSON,'Missing repository variable SIGNING_DEPLOYMENT_JSON');
@@ -49,8 +50,9 @@ export async function deploy({env=process.env,root=process.cwd(),run=runDefault,
  await assertCurrentMain();
  const settingsURL=`https://api.cloudflare.com/client/v4/accounts/${accountID}/workers/scripts/signing-control/settings`;
  const previous=await readJSON(settingsURL,env.CLOUDFLARE_API_TOKEN);
- const hasSecret=previous?.success===true&&previous.result?.bindings?.some(b=>b.name==='OP_SERVICE_ACCOUNT_TOKEN'&&b.type==='secret_text');
- need(hasSecret,'Missing retained Worker OP_SERVICE_ACCOUNT_TOKEN; commissioning is separately approved');
+ const matchesTokenBinding=b=>b.name==='SIGNER_SERVICE_ACCOUNT_TOKEN'&&b.type==='secrets_store_secret'&&b.store_id===input.signerTokenSecret.store_id&&b.secret_name===input.signerTokenSecret.secret_name;
+ const hasSecret=previous?.success===true&&previous.result?.bindings?.some(matchesTokenBinding);
+ need(hasSecret,'Missing existing signer Secrets Store binding; commissioning is separately approved');
  for(const binding of input.bindings){const metadata=await readJSON(`https://api.cloudflare.com/client/v4/accounts/${accountID}/workers/scripts/${binding.service}/settings`,env.CLOUDFLARE_API_TOKEN);need(metadata?.success===true,`Missing private service for ${binding.binding}`);}
  const directory=await mkdtemp(join(root,'.signing-deploy-'));const publicImageFile=join(root,'image-runtime-config.json');let wroteImage=false;
  const wrangler=resolve(root,'node_modules/wrangler/bin/wrangler.js');const tag='signing-control:'+sourceSHA;
@@ -64,10 +66,10 @@ export async function deploy({env=process.env,root=process.cwd(),run=runDefault,
   await invoke(process.execPath,[wrangler,'containers','push',tag],true);
   const image=publishedImage(JSON.parse(await invoke('docker',['image','inspect',`registry.cloudflare.com/${accountID}/${tag}`,'--format','{{json .RepoDigests}}'])));
   const config=deploymentConfig(input,image);const configPath=join(directory,'wrangler.json');await writeFile(configPath,JSON.stringify(config),{mode:0o600});
-  const args=[wrangler,'deploy','--config',configPath,'--message','signing_control '+sourceSHA];
+  const args=[wrangler,'deploy','--config',configPath,'--message','signer '+sourceSHA];
   await assertCurrentMain();await invoke(process.execPath,args,true);
   const installed=await readJSON(settingsURL,env.CLOUDFLARE_API_TOKEN);const bindings=installed?.result?.bindings??[];
-  need(installed?.success===true&&bindings.some(b=>b.name==='OP_SERVICE_ACCOUNT_TOKEN'&&b.type==='secret_text')&&bindings.some(b=>b.name==='ENABLED'&&b.text==='true')&&bindings.some(b=>b.name==='SIGNING_CONTROL_CONFIG_JSON'&&b.text===config.vars.SIGNING_CONTROL_CONFIG_JSON)&&input.bindings.every(expected=>bindings.some(b=>b.type==='service'&&b.name===expected.binding&&b.service===expected.service&&b.entrypoint===expected.entrypoint)),'Deployment readback differs; inspect provider deployment before retrying');
+  need(installed?.success===true&&bindings.some(matchesTokenBinding)&&bindings.some(b=>b.name==='ENABLED'&&b.text==='true')&&bindings.some(b=>b.name==='SIGNING_CONTROL_CONFIG_JSON'&&b.text===config.vars.SIGNING_CONTROL_CONFIG_JSON)&&input.bindings.every(expected=>bindings.some(b=>b.type==='service'&&b.name===expected.binding&&b.service===expected.service&&b.entrypoint===expected.entrypoint)),'Deployment readback differs; inspect provider deployment before retrying');
   return {worker:'signing-control',commit:sourceSHA,image};
  }finally{if(wroteImage)await rm(publicImageFile,{force:true});await rm(directory,{recursive:true,force:true});}
 }

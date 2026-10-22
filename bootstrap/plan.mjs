@@ -2,7 +2,7 @@ import { parseSSHKeyReference } from '../src/service/op-reference.mjs';
 export const INPUT_SCHEMA = 'signing-control-bootstrap-input/v1';
 const ACCOUNT_ID = '1a799c6e699d2ef7e87398692ce3ad7b';
 const OWNER_ORIGIN = 'https://control.vespoli.me';
-const REPOSITORY = 'susanbeasles/signing_control';
+const REPOSITORY = 'susanbeasles/signer';
 const HEX = /^[a-f0-9]{64}$/;
 const ID = /^[a-z2-7]{26}$/;
 const encoder = new TextEncoder();
@@ -146,6 +146,7 @@ export async function compilePlan(raw) {
     compatibility_date: '2026-10-08', compatibility_flags: ['nodejs_compat'], workers_dev: false, preview_urls: false, routes: [], observability: { enabled: false },
     durable_objects: { bindings: [{ name: 'SIGNING_CONTROL_STATE', class_name: 'SigningControlRepository' }] },
     migrations: [{ tag: 'signing-control-v1', new_sqlite_classes: ['SigningControlRepository'] }],
+    secrets_store_secrets: [],
     vars: { ENABLED: 'false', SIGNING_CONTROL_CONFIG_JSON: canonicalJson(input.runtime) },
     ...(image ? { containers: [{ class_name: 'SigningControlRepository', image, max_instances: 1, instance_type: 'standard-1', scheduling_policy: 'default', observability: { enabled: false } }] } : {}),
   };
@@ -158,7 +159,7 @@ export async function compilePlan(raw) {
     ['cloudflare.container.configure', 'Dedicated container', { accountID: ACCOUNT_ID, worker: 'signing-control', className: 'SigningControlRepository', image, maxInstances: 1 }, ['image-provenance-and-digest-readback', 'runtime-isolation-verification', 'source-policy-private-binding', 'depot-producer-OIDC-admission']],
     ['onepassword.vault-reference.bind', 'Dedicated 1Password vault', { accountDomain: op.accountDomain, vaultName: op.vaultName, vaultID: op.vaultID }, ['exact-vault-metadata-readback', 'dedicated-vault-scope-verification']],
     ['onepassword.item-reference.bind', 'Signing item reference', { accountDomain: op.accountDomain, vaultID: op.vaultID, itemName: op.itemName, itemID: op.itemID, opRef: runtime.opRef, publicKeyFingerprint: runtime.keyID }, ['exact-item-and-field-ID-metadata-readback', 'public-key-provenance-verification']],
-    ['onepassword.service-account-reference.bind', 'Service account reference', { accountDomain: op.accountDomain, serviceAccountID: op.serviceAccountID, vaultIDs: op.vaultID ? [op.vaultID] : [], permissions: ['read_items'], destinationBinding: 'OP_SERVICE_ACCOUNT_TOKEN' }, ['dedicated-account-and-exact-vault-permission-readback', 'separate-owner-authorized-secure-token-provisioning']],
+    ['onepassword.service-account-reference.bind', 'Service account reference', { accountDomain: op.accountDomain, serviceAccountID: op.serviceAccountID, vaultIDs: op.vaultID ? [op.vaultID] : [], permissions: ['read_items'], destinationBinding: 'SIGNER_SERVICE_ACCOUNT_TOKEN', custody: 'cloudflare-secrets-store-service-account-token-only' }, ['dedicated-account-and-exact-vault-permission-readback', 'separate-owner-authorized-secure-token-provisioning']],
     ['github.ssh-signing-key.register', 'Public SSH signing key', { expectedLogin: input.github.login, expectedAccountID: input.github.accountID, method: 'POST', url: 'https://api.github.com/user/ssh_signing_keys', body: { title: input.github.title, key: input.github.publicKey }, fingerprint: runtime.keyID }, ['authenticated-user-numeric-identity-readback', 'existing-signing-key-deduplication', 'explicit-public-key-registration-authorization']],
   ];
   const operations = await Promise.all(actions.map(async ([id, title, payload, prerequisites]) => {

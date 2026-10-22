@@ -4,7 +4,7 @@ export function exampleInput() {
     schema: 'signing-control-bootstrap-input/v1',
     accountID: '1a799c6e699d2ef7e87398692ce3ad7b',
     ownerOrigin: 'https://control.vespoli.me',
-    source: { repository: 'susanbeasles/signing_control', repositoryID: null, commit: null, artifactSha256: null },
+    source: { repository: 'susanbeasles/signer', repositoryID: null, commit: null, artifactSha256: null },
     onePassword: { accountDomain: null, vaultName: null, vaultID: null, itemName: 'gh-signing-key', itemID: null, serviceAccountID: null },
     github: { login: 'susanbeasles', accountID: '215839550', title: 'signing-control', publicKey: null },
     runtime: {
@@ -13,8 +13,8 @@ export function exampleInput() {
       services: [
         ['ProsRUs', 1412827677], ['personal-control', 1408909065],
         ['backup-control', 1407276404], ['ghcaretaker', 1405513776],
-        ['workflow_depot', 1405415683], ['delivery_control', 1405415291],
-        ['repoctl', 1404914851],
+        ['workflow_depot', 1405415683], ['deployer', 1405415291],
+        ['repoctl', 1404914851], ['signer', 1416201242],
       ].map(([name, repositoryID]) => ({
         schema: 'signing-control-service/v1', repositoryID, repository: `susanbeasles/${name}`,
         git: { program: '/usr/bin/git', sha256: null, directory: '/run/signing-control/git', authenticated: true, maxObjects: 100000, maxBytes: 8388608 },

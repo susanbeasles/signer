@@ -1,4 +1,5 @@
 import {DurableObject,WorkerEntrypoint} from 'cloudflare:workers';
+import {readSignerServiceToken} from './service-token.mjs';
 import {CAPABILITIES,READS,configDigest,validateInstallation,installationConfigurations,selectConfiguration,createSigningController} from './controller.mjs';
 const BINDINGS={policy:'SOURCE_POLICY',hardware:'OWNER_HARDWARE',ci:'SOURCE_CI',scans:'SOURCE_SCANS',review:'SOURCE_REVIEW',inventory:'SOURCE_INVENTORY',publisher:'SOURCE_PUBLISHER',source:'SOURCE_READ_CREDENTIAL'};
 const denied=()=>{throw Error('signing-control-unavailable');};
@@ -14,7 +15,7 @@ export default {fetch(){return new Response('Not found',{status:404,headers:{'ca
 export class SigningControlRepository extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.controller=null;
   if(env.ENABLED==='true')ctx.blockConcurrencyWhile(async()=>{
-   try{const choices=installationConfigurations(installation(env)),config=choices.find(candidate=>env.SIGNING_CONTROL_STATE.idFromName(String(candidate.service.repositoryID)).toString()===ctx.id.toString());if(!config)denied();this.repositoryID=config.service.repositoryID;this.controller=createSigningController({storage:ctx.storage,container:ctx.container,containerId:ctx.id.toString(),config,capabilities:installedCapabilities(env),serviceToken:()=>env.OP_SERVICE_ACCOUNT_TOKEN,interceptor:props=>ctx.exports.SigningControlEgress({props}),waitUntil:promise=>ctx.waitUntil(promise)});await this.controller.resume();}catch{this.controller=null;}
+   try{const choices=installationConfigurations(installation(env)),config=choices.find(candidate=>env.SIGNING_CONTROL_STATE.idFromName(String(candidate.service.repositoryID)).toString()===ctx.id.toString());if(!config)denied();this.repositoryID=config.service.repositoryID;this.controller=createSigningController({storage:ctx.storage,container:ctx.container,containerId:ctx.id.toString(),config,capabilities:installedCapabilities(env),serviceToken:()=>readSignerServiceToken(env),interceptor:props=>ctx.exports.SigningControlEgress({props}),waitUntil:promise=>ctx.waitUntil(promise)});await this.controller.resume();}catch{this.controller=null;}
   });
  }
  requireController(){configuration(this.env,this.repositoryID);if(!this.controller)denied();return this.controller;}

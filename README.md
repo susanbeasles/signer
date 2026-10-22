@@ -1,6 +1,6 @@
 # Signing Control
 
-This repository, `susanbeasles/signing_control`, owns the dedicated out-of-band
+This repository, `susanbeasles/signer`, owns the dedicated out-of-band
 Git signing service. Its Cloudflare Worker is named `signing-control`. The signer
 owns direct deployment of its Worker/container to Cloudflare.
 
