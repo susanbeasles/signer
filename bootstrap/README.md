@@ -1,6 +1,6 @@
 # Signing Control bootstrap review
 
-This directory is an executable, local bootstrap compiler and review UI for the separate private signer extension. It does not extend or execute the existing four-worker bootstrap. The source repository is exactly `susanbeasles/signing_control`; the Worker is `signing-control`. Repository creation is outside this compiler.
+This directory is an executable, local bootstrap compiler and review UI for the separate private signer extension. It does not extend or execute the existing four-worker bootstrap. The source repository is exactly `susanbeasles/signer`; the Worker is `signing-control`. Repository creation is outside this compiler.
 
 Run with Node 24 from the source root. No dependencies or provider credentials are needed:
 

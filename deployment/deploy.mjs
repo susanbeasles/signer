@@ -7,7 +7,7 @@ import {validateImageInputs} from '../runtime/check-image.mjs';
 import {validateInstallation,canonical} from '../cloudflare/controller.mjs';
 const exec=promisify(execFile);
 const accountID='1a799c6e699d2ef7e87398692ce3ad7b';
-const repository='susanbeasles/signing_control';
+const repository='susanbeasles/signer';
 const need=(ok,message)=>{if(!ok)throw Error(message);};
 const exact=(v,keys)=>v&&Object.getPrototypeOf(v)===Object.prototype&&Object.keys(v).sort().join()===keys.sort().join();
 const bindingNames=['SOURCE_POLICY','OWNER_HARDWARE','SOURCE_CI','SOURCE_SCANS','SOURCE_REVIEW','SOURCE_INVENTORY','SOURCE_PUBLISHER','SOURCE_READ_CREDENTIAL'];
@@ -40,7 +40,7 @@ async function requestJSON(url,token,fetcher=fetch){
 }
 const runDefault=async(program,args,options)=>{try{return (await exec(program,args,{...options,encoding:'utf8',timeout:600000,maxBuffer:4194304})).stdout;}catch(error){throw Error(`Deployment command ${program==='docker'?'docker':'wrangler'} failed (exit ${Number.isInteger(error.code)?error.code:'unavailable'}); provider output withheld to protect credentials`);}};
 export async function deploy({env=process.env,root=process.cwd(),run=runDefault,readJSON=requestJSON}={}){
- need(env.GITHUB_EVENT_NAME==='workflow_dispatch'&&env.GITHUB_REF==='refs/heads/main'&&env.GITHUB_REPOSITORY==='susanbeasles/delivery_control'&&env.SOURCE_REPOSITORY===repository&&env.SOURCE_REPOSITORY_ID==='1416201242'&&/^[a-f0-9]{40}$/.test(env.SOURCE_SHA??''),'Deployment requires central delivery_control and exact signing_control source');
+ need(env.GITHUB_EVENT_NAME==='workflow_dispatch'&&env.GITHUB_REF==='refs/heads/main'&&env.GITHUB_REPOSITORY==='susanbeasles/deployer'&&env.SOURCE_REPOSITORY===repository&&env.SOURCE_REPOSITORY_ID==='1416201242'&&/^[a-f0-9]{40}$/.test(env.SOURCE_SHA??''),'Deployment requires central deployer and exact signer source');
  const sourceSHA=env.SOURCE_SHA;
  need(!env.OP_SERVICE_ACCOUNT_TOKEN,'Signing credentials must remain in existing Worker custody; runner uploads are forbidden');
  need(env.CLOUDFLARE_API_TOKEN,'Missing central Cloudflare deployment credential');need(env.GITHUB_TOKEN,'Missing workflow GITHUB_TOKEN');need(env.SIGNING_DEPLOYMENT_JSON,'Missing repository variable SIGNING_DEPLOYMENT_JSON');
@@ -64,7 +64,7 @@ export async function deploy({env=process.env,root=process.cwd(),run=runDefault,
   await invoke(process.execPath,[wrangler,'containers','push',tag],true);
   const image=publishedImage(JSON.parse(await invoke('docker',['image','inspect',`registry.cloudflare.com/${accountID}/${tag}`,'--format','{{json .RepoDigests}}'])));
   const config=deploymentConfig(input,image);const configPath=join(directory,'wrangler.json');await writeFile(configPath,JSON.stringify(config),{mode:0o600});
-  const args=[wrangler,'deploy','--config',configPath,'--message','signing_control '+sourceSHA];
+  const args=[wrangler,'deploy','--config',configPath,'--message','signer '+sourceSHA];
   await assertCurrentMain();await invoke(process.execPath,args,true);
   const installed=await readJSON(settingsURL,env.CLOUDFLARE_API_TOKEN);const bindings=installed?.result?.bindings??[];
   need(installed?.success===true&&bindings.some(b=>b.name==='OP_SERVICE_ACCOUNT_TOKEN'&&b.type==='secret_text')&&bindings.some(b=>b.name==='ENABLED'&&b.text==='true')&&bindings.some(b=>b.name==='SIGNING_CONTROL_CONFIG_JSON'&&b.text===config.vars.SIGNING_CONTROL_CONFIG_JSON)&&input.bindings.every(expected=>bindings.some(b=>b.type==='service'&&b.name===expected.binding&&b.service===expected.service&&b.entrypoint===expected.entrypoint)),'Deployment readback differs; inspect provider deployment before retrying');

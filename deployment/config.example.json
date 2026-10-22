@@ -89,7 +89,7 @@
       {
         "schema": "signing-control-service/v1",
         "repositoryID": 1405415291,
-        "repository": "susanbeasles/delivery_control",
+        "repository": "susanbeasles/deployer",
         "git": {
           "program": "/usr/bin/git",
           "sha256": null,
@@ -121,7 +121,7 @@
       {
         "schema": "signing-control-service/v1",
         "repositoryID": 1416201242,
-        "repository": "susanbeasles/signing_control",
+        "repository": "susanbeasles/signer",
         "git": {
           "program": "/usr/bin/git",
           "sha256": null,

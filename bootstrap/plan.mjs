@@ -2,7 +2,7 @@ import { parseSSHKeyReference } from '../src/service/op-reference.mjs';
 export const INPUT_SCHEMA = 'signing-control-bootstrap-input/v1';
 const ACCOUNT_ID = '1a799c6e699d2ef7e87398692ce3ad7b';
 const OWNER_ORIGIN = 'https://control.vespoli.me';
-const REPOSITORY = 'susanbeasles/signing_control';
+const REPOSITORY = 'susanbeasles/signer';
 const HEX = /^[a-f0-9]{64}$/;
 const ID = /^[a-z2-7]{26}$/;
 const encoder = new TextEncoder();
