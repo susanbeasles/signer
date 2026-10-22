@@ -11,6 +11,7 @@
   "observability": {
     "enabled": false
   },
+  "secrets_store_secrets": [],
   "vars": {
     "ENABLED": "false",
     "SIGNING_CONTROL_CONFIG_JSON": "{}"

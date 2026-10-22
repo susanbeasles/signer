@@ -2,7 +2,7 @@
 
 A main push calls the immutable `workflow_depot/request-deployment.yml` capability for registered target `signing-control`. The source repository holds only the existing `RELEASE_DISPATCH_TOKEN` reference; it does not inject Cloudflare or 1Password credentials. Central admission verifies the exact signed current-main source and caller run before any target execution.
 
-`deployment/deploy.mjs` refuses standalone main execution. It accepts only central `delivery_control` workflow dispatch with exact `SOURCE_REPOSITORY`, `SOURCE_REPOSITORY_ID` and `SOURCE_SHA`. Cloudflare deployment credentials belong to the existing central runtime. Runtime signing credentials remain in the existing Worker: runner-provided `OP_SERVICE_ACCOUNT_TOKEN` and secret-file upload are prohibited. Missing retained custody blocks execution and requires separately approved commissioning.
+`deployment/deploy.mjs` refuses standalone main execution. It accepts only central `delivery_control` workflow dispatch with exact `SOURCE_REPOSITORY`, `SOURCE_REPOSITORY_ID` and `SOURCE_SHA`. Cloudflare deployment credentials belong to the existing central runtime. Runtime signing credentials remain in the native Secrets Store binding; runner-provided `SIGNER_SERVICE_ACCOUNT_TOKEN` and secret-file upload are prohibited. Missing retained custody blocks execution and requires separately approved commissioning.
 
 Public `SIGNING_DEPLOYMENT_JSON` remains the existing deployment schema: approved immutable image/tool pins, signing public-key/item references and private service bindings. No values are invented. Existing stale-main checks, provider readback, serialization and no retry on uncertain writes remain intact.
 

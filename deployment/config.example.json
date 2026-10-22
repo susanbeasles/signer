@@ -161,5 +161,9 @@
       }
     }
   },
-  "bindings": []
+  "bindings": [],
+  "signerTokenSecret": {
+    "store_id": null,
+    "secret_name": null
+  }
 }
