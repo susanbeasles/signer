@@ -32,7 +32,7 @@ export function publishedImage(values){
  need(matches.length===1,'Published signer image digest missing or ambiguous');return matches[0];
 }
 async function requestJSON(url,token,fetcher=fetch){
- const response=await fetcher(url,{redirect:'error',signal:AbortSignal.timeout(20000),headers:{Authorization:'Bearer '+token,Accept:'application/json','X-GitHub-Api-Version':'2022-11-28'}});
+ const response=await fetcher(url,{redirect:'error',signal:AbortSignal.timeout(20000),headers:{...(token?{Authorization:'Bearer '+token}:{}),Accept:'application/json','X-GitHub-Api-Version':'2022-11-28'}});
  if(response.status===404)return null;
  need(response.ok,`Deployment metadata read failed (HTTP ${response.status})`);
  const reader=response.body.getReader();let size=0;const chunks=[];
@@ -41,12 +41,18 @@ async function requestJSON(url,token,fetcher=fetch){
 }
 const runDefault=async(program,args,options)=>{try{return (await exec(program,args,{...options,encoding:'utf8',timeout:600000,maxBuffer:4194304})).stdout;}catch(error){throw Error(`Deployment command ${program==='docker'?'docker':'wrangler'} failed (exit ${Number.isInteger(error.code)?error.code:'unavailable'}); provider output withheld to protect credentials`);}};
 export async function deploy({env=process.env,root=process.cwd(),run=runDefault,readJSON=requestJSON}={}){
- need(env.GITHUB_EVENT_NAME==='workflow_dispatch'&&env.GITHUB_REF==='refs/heads/main'&&env.GITHUB_REPOSITORY==='susanbeasles/deployer'&&env.SOURCE_REPOSITORY===repository&&env.SOURCE_REPOSITORY_ID==='1416201242'&&/^[a-f0-9]{40}$/.test(env.SOURCE_SHA??''),'Deployment requires central deployer and exact signer source');
- const sourceSHA=env.SOURCE_SHA;
- need(!env.OP_SERVICE_ACCOUNT_TOKEN,'Signing credentials must remain in existing Worker custody; runner uploads are forbidden');
- need(env.CLOUDFLARE_API_TOKEN,'Missing central Cloudflare deployment credential');need(env.GITHUB_TOKEN,'Missing workflow GITHUB_TOKEN');need(env.SIGNING_DEPLOYMENT_JSON,'Missing repository variable SIGNING_DEPLOYMENT_JSON');
+ need(env.WORKERS_CI==='1'&&env.CI==='true'&&env.WORKERS_CI_BRANCH==='main'&&/^[a-f0-9]{40}$/.test(env.WORKERS_CI_COMMIT_SHA??''),'Signer deployment requires a production Cloudflare Builds commit');
+ const sourceSHA=env.WORKERS_CI_COMMIT_SHA;
+ need(!env.OP_SERVICE_ACCOUNT_TOKEN&&!env.SIGNER_SERVICE_ACCOUNT_TOKEN,'Signing credentials must remain in Cloudflare Secrets Store; build-runtime injection is forbidden');
+ need(env.CLOUDFLARE_API_TOKEN,'Missing central Cloudflare deployment credential');need(env.SIGNING_DEPLOYMENT_JSON,'Missing repository variable SIGNING_DEPLOYMENT_JSON');
  let input;try{input=JSON.parse(env.SIGNING_DEPLOYMENT_JSON);}catch{throw Error('Invalid SIGNING_DEPLOYMENT_JSON configuration');}input=validateDeployment(input);
- const assertCurrentMain=async()=>{const head=await readJSON(`https://api.github.com/repos/${repository}/git/ref/heads/main`,env.GITHUB_TOKEN);need(head?.object?.sha===sourceSHA,'Main advanced; superseded deployment refused');};
+ const assertCurrentMain=async()=>{
+   const head=await readJSON(`https://api.github.com/repos/${repository}/git/ref/heads/main`,null);
+   need(head?.object?.sha===sourceSHA,'Main advanced; superseded deployment refused');
+   const signed=await readJSON(`https://api.github.com/repos/${repository}/commits/${sourceSHA}`,null);
+   need(signed?.sha===sourceSHA&&signed?.commit?.verification?.verified===true,
+     'Current main source commit is not verified signed');
+ };
  await assertCurrentMain();
  const settingsURL=`https://api.cloudflare.com/client/v4/accounts/${accountID}/workers/scripts/signing-control/settings`;
  const previous=await readJSON(settingsURL,env.CLOUDFLARE_API_TOKEN);
@@ -54,7 +60,15 @@ export async function deploy({env=process.env,root=process.cwd(),run=runDefault,
  // An uninstalled Worker must not deadlock initial deployment. Its backing secret
  // must already exist and be active in the explicitly approved Secrets Store.
  // Never migrate an existing Worker to an unexpected signer credential implicitly.
- need(previous===null||(previous?.success===true&&Array.isArray(previous.result?.bindings)&&previous.result.bindings.some(matchesTokenBinding)),
+ const existingBindings=previous?.result?.bindings;
+ const installedToken=previous?.success===true&&Array.isArray(existingBindings)&&existingBindings.some(matchesTokenBinding);
+ // Only an inert, zero-capability bootstrap placeholder may be upgraded when its
+ // Secrets Store credential exists. No routes or private signing callbacks are enabled.
+ const dormant=previous?.success===true&&Array.isArray(existingBindings)&&
+   existingBindings.length===2&&
+   existingBindings.some(b=>b.name==='ENABLED'&&b.type==='plain_text'&&b.text==='false')&&
+   existingBindings.some(b=>b.name==='SIGNING_CONTROL_CONFIG_JSON'&&b.type==='plain_text'&&b.text==='{}');
+ need(previous===null||installedToken||dormant,
    'Existing signer Worker has mismatched token custody; explicit migration required');
  const storeURL=`https://api.cloudflare.com/client/v4/accounts/${accountID}/secrets_store/stores/${input.signerTokenSecret.store_id}/secrets?search=${encodeURIComponent(input.signerTokenSecret.secret_name)}&per_page=100`;
  const store=await readJSON(storeURL,env.CLOUDFLARE_API_TOKEN);
