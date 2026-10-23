@@ -10,9 +10,9 @@ concurrency:
 jobs:
   request:
     if: github.repository == 'susanbeasles/signer' && github.repository_id == '1416201242'
-    uses: susanbeasles/workflow_depot/.github/workflows/request-deployment.yml@126560f32ed6d4c09914e8b88fac39d93df4e703
+    uses: susanbeasles/workflow_depot/.github/workflows/request-deployment.yml@9f78454c5a579aa4955ad481171d4eba633038fb
     with:
       target: signing-control
-      depot_ref: 126560f32ed6d4c09914e8b88fac39d93df4e703
+      depot_ref: 9f78454c5a579aa4955ad481171d4eba633038fb
     secrets:
       RELEASE_DISPATCH_TOKEN: ${{ secrets.RELEASE_DISPATCH_TOKEN }}

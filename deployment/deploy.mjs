@@ -51,8 +51,17 @@ export async function deploy({env=process.env,root=process.cwd(),run=runDefault,
  const settingsURL=`https://api.cloudflare.com/client/v4/accounts/${accountID}/workers/scripts/signing-control/settings`;
  const previous=await readJSON(settingsURL,env.CLOUDFLARE_API_TOKEN);
  const matchesTokenBinding=b=>b.name==='SIGNER_SERVICE_ACCOUNT_TOKEN'&&b.type==='secrets_store_secret'&&b.store_id===input.signerTokenSecret.store_id&&b.secret_name===input.signerTokenSecret.secret_name;
- const hasSecret=previous?.success===true&&previous.result?.bindings?.some(matchesTokenBinding);
- need(hasSecret,'Missing existing signer Secrets Store binding; commissioning is separately approved');
+ // An uninstalled Worker must not deadlock initial deployment. Its backing secret
+ // must already exist and be active in the explicitly approved Secrets Store.
+ // Never migrate an existing Worker to an unexpected signer credential implicitly.
+ need(previous===null||(previous?.success===true&&Array.isArray(previous.result?.bindings)&&previous.result.bindings.some(matchesTokenBinding)),
+   'Existing signer Worker has mismatched token custody; explicit migration required');
+ const storeURL=`https://api.cloudflare.com/client/v4/accounts/${accountID}/secrets_store/stores/${input.signerTokenSecret.store_id}/secrets?search=${encodeURIComponent(input.signerTokenSecret.secret_name)}&per_page=100`;
+ const store=await readJSON(storeURL,env.CLOUDFLARE_API_TOKEN);
+ need(store?.success===true&&Array.isArray(store.result)&&store.result.filter(secret=>
+   secret?.name===input.signerTokenSecret.secret_name&&secret.status==='active'&&
+   Array.isArray(secret.scopes)&&secret.scopes.includes('workers')).length===1,
+   'Signer Secrets Store token is missing, inactive, or not scoped to Workers');
  for(const binding of input.bindings){const metadata=await readJSON(`https://api.cloudflare.com/client/v4/accounts/${accountID}/workers/scripts/${binding.service}/settings`,env.CLOUDFLARE_API_TOKEN);need(metadata?.success===true,`Missing private service for ${binding.binding}`);}
  const directory=await mkdtemp(join(root,'.signing-deploy-'));const publicImageFile=join(root,'image-runtime-config.json');let wroteImage=false;
  const wrangler=resolve(root,'node_modules/wrangler/bin/wrangler.js');const tag='signing-control:'+sourceSHA;
