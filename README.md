@@ -112,9 +112,14 @@ require delivery_control to deploy the signer. Shared integration orchestration
 and signing eligibility policy remain owned by workflow_depot. The Cloudflare
 Worker and isolated signing container stay in this standalone repository.
 
-Pushes to `main` automatically run `.github/workflows/deploy.yml`, building and
-publishing the matching container and deploying the enabled Worker directly to
-Cloudflare. No manual sign/deploy action or delivery_control call is required.
-See [deployment setup](deployment/README.md) for the exact one-time inputs and
-verified resource blockers. The disabled `cloudflare/wrangler.jsonc` remains a
-reference template; the release command generates the enabled configuration.
+Once the Cloudflare Workers Builds production trigger is commissioned, a verified
+signed push to `main` runs Cloudflare's build/test and directly deploys the
+matching Worker and isolated Container. GitHub Actions performs credential-free
+source validation; it cannot dispatch or deploy the signer. The Cloudflare
+build token and 1Password runtime signing credentials remain in their separate,
+scoped provider custody.
+
+See [deployment setup](deployment/README.md) for the reviewed one-time inputs
+and verified blockers. The disabled `cloudflare/wrangler.jsonc` remains a
+reference template; the release script generates the enabled configuration.
+A source merge alone is not a live deployment or evidence of commissioned signing.
