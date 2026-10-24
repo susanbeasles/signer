@@ -29,7 +29,7 @@ export async function deployNative({env=process.env,fetcher=fetch,bundle}={}){
   const code=await (bundle?bundle():(async()=>{const {build}=await import('esbuild');const result=await build({entryPoints:[new URL('../native/worker.mjs',import.meta.url).pathname],bundle:true,write:false,format:'esm',platform:'neutral',target:'es2022',external:['cloudflare:workers'],legalComments:'none'});return result.outputFiles[0].text;})());
   const artifact=createHash('sha256').update(code).digest('hex');
   const bindings=[{name:'SIGNER',type:'durable_object_namespace',class_name:'Signer'},{name:'ACCESS_AUD',type:'plain_text',text:access.text},{name:'SOURCE_SHA',type:'plain_text',text:sha},{name:'ARTIFACT_SHA256',type:'plain_text',text:artifact},...(policy?[policy]:[])];
-  const metadata={main_module:'worker.mjs',compatibility_date:'2026-10-24',bindings,keep_bindings:['secret_key'],observability:{enabled:true,logs:{enabled:true,invocation_logs:false},redact_query_string:true},annotations:{'workers/message':'signer '+sha}};
+  const metadata={main_module:'worker.mjs',compatibility_date:'2026-10-13',bindings,keep_bindings:['secret_key'],observability:{enabled:true,logs:{enabled:true,invocation_logs:false},redact_query_string:true},annotations:{'workers/message':'signer '+sha}};
   if(!current.result.bindings.some(b=>b.name==='SIGNER'&&b.type==='durable_object_namespace'))metadata.migrations={new_tag:'signer-v1',steps:[{new_sqlite_classes:['Signer']}]};
   const body=new FormData();body.set('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));body.set('worker.mjs',new Blob([code],{type:'application/javascript+module'}),'worker.mjs');
   // Recheck after bundling; a superseded build cannot publish old main.

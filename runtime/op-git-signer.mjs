@@ -36,13 +36,13 @@ export async function assertPrivateMemory({statfsImpl=statfs,readFileImpl=readFi
  const swaps=await readFileImpl('/proc/swaps','utf8'),limits=await readFileImpl('/proc/self/limits','utf8');
  check(swaps.trim().split('\n').length===1&&/^Max core file size\s+0\s/m.test(limits));
 }
-async function workspace(){
- await assertPrivateMemory();
+async function workspace(preflight=assertPrivateMemory){
+ await preflight();
  const directory=await mkdtemp('/dev/shm/signing-control-');await chmod(directory,0o700);return directory;
 }
 export async function createOpGitSigner({config,serviceToken=null,authorize,deadline,clock=()=>Math.floor(Date.now()/1000),effects={}}){
  config=validateSignerConfig(config);check(typeof authorize==='function'&&Number.isSafeInteger(deadline)&&deadline>clock());
- const pin=effects.pin??pinExecutable,run=effects.run??runBounded,agentStart=effects.startAgent??startAgent;
+ const pin=effects.pin??pinExecutable,run=effects.run??runBounded,agentStart=effects.startAgent??startAgent,preflight=effects.preflight??assertPrivateMemory;
  const abort=new AbortController();let closed=false,busy=false;const operations=new Set();
  const live=proof=>{check(!closed&&!abort.signal.aborted&&deadline>clock());if(proof)check(proof.expiresAt>clock());};
  const timeout=proof=>{live(proof);return Math.max(1,Math.min(10000,(Math.min(deadline,proof?.expiresAt??deadline)-clock())*1000));};
@@ -52,7 +52,7 @@ export async function createOpGitSigner({config,serviceToken=null,authorize,dead
   let directory;
   try{
    live();check(typeof payload==='string'&&Buffer.byteLength(payload)<=24000&&signatureKeyID(signature)===config.keyID);
-   const program=await pin(config.toolchain.sshKeygen);directory=await workspace();const file=join(directory,'signature');await writeFile(file,signature,{mode:0o600});live();
+   const program=await pin(config.toolchain.sshKeygen);directory=await workspace(preflight);const file=join(directory,'signature');await writeFile(file,signature,{mode:0o600});live();
    const output=await run(program,['-Y','check-novalidate','-n','git','-s',file],{input:Buffer.from(payload),env:env(directory),limit:16384,timeoutMs:timeout(),signal:abort.signal});output.fill(0);live();return true;
   }catch{return false;}finally{if(directory)await rm(directory,{recursive:true,force:true});}
  }
@@ -63,7 +63,7 @@ export async function createOpGitSigner({config,serviceToken=null,authorize,dead
    check(typeof serviceToken==='string'&&/^[\x21-\x7e]{1,8192}$/.test(serviceToken));
    const proof=await authorize(structuredClone(input));
    check(exact(proof,['authorized','keyID','objectDigest','expiresAt'])&&proof.authorized===true&&proof.keyID===config.keyID&&proof.objectDigest===hash(input.payload)&&Number.isSafeInteger(proof.expiresAt));live(proof);
-   directory=await workspace();const childEnv=env(directory),socket=join(directory,'agent.sock');
+   directory=await workspace(preflight);const childEnv=env(directory),socket=join(directory,'agent.sock');
    const agentProgram=await pin(config.toolchain.sshAgent);live(proof);agent=await agentStart(agentProgram,socket,{env:childEnv,timeoutMs:timeout(proof),signal:abort.signal});
    const opProgram=await pin(config.toolchain.op);live(proof);
    secretEnv={...childEnv,OP_SERVICE_ACCOUNT_TOKEN:serviceToken,OP_CONFIG_DIR:join(directory,'op'),OP_CACHE:'false',SSL_CERT_FILE:'/etc/cloudflare/certs/cloudflare-containers-ca.crt'};
@@ -82,3 +82,4 @@ export async function createOpGitSigner({config,serviceToken=null,authorize,dead
  const track=async promise=>{operations.add(promise);try{return await promise;}finally{operations.delete(promise);}};
  return Object.freeze({keyID:config.keyID,verifyGit:input=>track(verifyGit(input)),async signGit(input){check(!busy);busy=true;try{return await track(signing(structuredClone(input)));}finally{busy=false;}},async close(){closed=true;serviceToken=null;abort.abort();await Promise.allSettled([...operations]);process.removeListener('SIGTERM',terminate);process.removeListener('SIGINT',terminate);}});
 }
+

@@ -2,7 +2,7 @@
   "name": "signer",
   "account_id": "1a799c6e699d2ef7e87398692ce3ad7b",
   "main": "worker.mjs",
-  "compatibility_date": "2026-10-24",
+  "compatibility_date": "2026-10-13",
   "workers_dev": true,
   "preview_urls": false,
   "durable_objects": {"bindings": [{"name": "SIGNER", "class_name": "Signer"}]},

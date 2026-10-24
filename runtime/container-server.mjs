@@ -29,8 +29,8 @@ export function createContainerHandler({immutableConfig,launch,onTerminal,clock=
   }catch{setImmediate(onTerminal);return new Response(null,{status:400});}
  };
 }
-export async function launchSupervisor(body,{spawnImpl=spawn,clock=()=>Math.floor(Date.now()/1000)}={}){
- await assertPrivateMemory();
+export async function launchSupervisor(body,{spawnImpl=spawn,clock=()=>Math.floor(Date.now()/1000),preflight=assertPrivateMemory}={}){
+ await preflight();
  return new Promise((resolve,reject)=>{
   if(body.job.deadline<=clock()){reject(Error('Signing supervisor unavailable'));return;}
   const child=spawnImpl(process.execPath,[fileURLToPath(new URL('./supervisor.mjs',import.meta.url))],{env:{PATH:'/usr/bin:/bin',LANG:'C.UTF-8',LC_ALL:'C.UTF-8',NODE_EXTRA_CA_CERTS:'/etc/cloudflare/certs/cloudflare-containers-ca.crt'},stdio:['pipe','pipe','pipe','pipe','pipe'],detached:true,windowsHide:true});
@@ -60,3 +60,4 @@ export async function assertRuntimeIdentity({pid=process.pid,readStatus=()=>read
  if(pid!==1||!/^Uid:\s+10001\s+10001\s+10001\s+10001\s*$/m.test(status)||!/^Gid:\s+10001\s+10001\s+10001\s+10001\s*$/m.test(status)||!/^Groups:[ \t]*$/m.test(status)||!/^NoNewPrivs:\s+1\s*$/m.test(status)||!['Inh','Prm','Eff','Bnd','Amb'].every(name=>new RegExp('^Cap'+name+':\\s+0+\\s*$','m').test(status)))throw Error('Container identity unavailable');
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){serve().catch(()=>process.exit(1));}
+

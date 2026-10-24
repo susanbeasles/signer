@@ -29,7 +29,7 @@ test('configuration rejects mutable refs, private keys, foreign paths and public
 });
 test('fixture-only key moves via stdin into new agent and real ssh-keygen verifies the exact Git payload',async()=>{
  const f=await fixture(),calls=[],authorizations=[];
- const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:'SYNTHETIC-OP-TOKEN',deadline:Math.floor(Date.now()/1000)+60,authorize:async input=>{authorizations.push(input);return {authorized:true,keyID:f.key.keyID,objectDigest:hash(input.payload),expiresAt:Math.floor(Date.now()/1000)+30};},effects:{pin:async tool=>tool.path==='/usr/local/bin/op'?tool.path:runtime.pinExecutable(tool),run:async(program,args,options)=>{calls.push({program,args,env:{...options.env},input:program.endsWith('/ssh-add')?Buffer.from(options.input??''):null});if(program==='/usr/local/bin/op')return Buffer.from(f.key.privateKey);return runtime.runBounded(program,args,options);}}});
+ const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:'SYNTHETIC-OP-TOKEN',deadline:Math.floor(Date.now()/1000)+60,authorize:async input=>{authorizations.push(input);return {authorized:true,keyID:f.key.keyID,objectDigest:hash(input.payload),expiresAt:Math.floor(Date.now()/1000)+30};},effects:{preflight:async()=>{},pin:async tool=>tool.path==='/usr/local/bin/op'?tool.path:runtime.pinExecutable(tool),run:async(program,args,options)=>{calls.push({program,args,env:{...options.env},input:program.endsWith('/ssh-add')?Buffer.from(options.input??''):null});if(program==='/usr/local/bin/op')return Buffer.from(f.key.privateKey);return runtime.runBounded(program,args,options);}}});
  try{
   let signature;try{signature=await signer.signGit({type:'commit',payload:f.payload,authorization:{kind:'synthetic'}});}catch(error){assert.fail(error.message+'; subprocess stages: '+calls.map(c=>c.program+' '+c.args.slice(0,2).join(' ')).join(', '));}
   assert.match(signature,/^-----BEGIN SSH SIGNATURE-----/);assert.equal(await signer.verifyGit({payload:f.payload,signature}),true);assert.equal(await signer.verifyGit({payload:f.payload+'changed',signature}),false);
@@ -43,18 +43,18 @@ test('fixture-only key moves via stdin into new agent and real ssh-keygen verifi
 test('denied authorization and absent service token perform no key read or child spawn',async()=>{
  const f=await fixture();let calls=0;
  for(const token of [null,'SYNTHETIC']){
-  const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:token,deadline:Math.floor(Date.now()/1000)+60,authorize:async()=>({authorized:false}),effects:{pin:async t=>t.path,run:async()=>{calls++;throw Error('must not run');},startAgent:async()=>{calls++;throw Error('must not start');}}});
+  const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:token,deadline:Math.floor(Date.now()/1000)+60,authorize:async()=>({authorized:false}),effects:{preflight:async()=>{},pin:async t=>t.path,run:async()=>{calls++;throw Error('must not run');},startAgent:async()=>{calls++;throw Error('must not start');}}});
   try{await assert.rejects(signer.signGit({type:'commit',payload:f.payload,authorization:{}}));}finally{await signer.close();}
  }
  assert.equal(calls,0);
 });
 test('expiry after op read prevents key import/signature, and cleans the agent workspace',async()=>{
  const f=await fixture();let now=1000,workspace;const calls=[];
- const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:'SYNTHETIC',deadline:1100,clock:()=>now,authorize:async input=>({authorized:true,keyID:f.key.keyID,objectDigest:hash(input.payload),expiresAt:1050}),effects:{pin:async t=>t.path,run:async(program,args,options)=>{calls.push(program);workspace=options.env.HOME;now=1060;return Buffer.from(f.key.privateKey);},startAgent:async()=>({close:async()=>{}})}});
+ const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:'SYNTHETIC',deadline:1100,clock:()=>now,authorize:async input=>({authorized:true,keyID:f.key.keyID,objectDigest:hash(input.payload),expiresAt:1050}),effects:{preflight:async()=>{},pin:async t=>t.path,run:async(program,args,options)=>{calls.push(program);workspace=options.env.HOME;now=1060;return Buffer.from(f.key.privateKey);},startAgent:async()=>({close:async()=>{}})}});
  try{await assert.rejects(signer.signGit({type:'commit',payload:f.payload,authorization:{}}));assert.deepEqual(calls,['/usr/local/bin/op']);assert.equal(existsSync(workspace),false);}finally{await signer.close();f.key.privateKey.fill(0);}
 });
 test('read-only signature verification never obtains a key or needs an op token',async()=>{
- const f=await fixture();let calls=0;const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:null,deadline:Math.floor(Date.now()/1000)+60,authorize:async()=>{throw Error('not a signing action');},effects:{pin:async t=>t.path,run:async()=>{calls++;throw Error('must not read');}}});
+ const f=await fixture();let calls=0;const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:null,deadline:Math.floor(Date.now()/1000)+60,authorize:async()=>{throw Error('not a signing action');},effects:{preflight:async()=>{},pin:async t=>t.path,run:async()=>{calls++;throw Error('must not read');}}});
  try{assert.equal(await signer.verifyGit({payload:f.payload,signature:'invalid'}),false);assert.equal(calls,0);}finally{await signer.close();}
 });
 test('bounded children suppress error output and terminate timeout/overflow',async()=>{
@@ -67,7 +67,7 @@ test('op origins require explicit exact source-owned HTTPS hostnames',async()=>{
 });
 test('expired final verification cannot return an authorized signature',async()=>{
  const f=await fixture();let now=1000;const signed=f.key.signature(f.payload);
- const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:'SYNTHETIC',deadline:1100,clock:()=>now,authorize:async input=>({authorized:true,keyID:f.key.keyID,objectDigest:hash(input.payload),expiresAt:1050}),effects:{pin:async t=>t.path,startAgent:async()=>({close:async()=>{}}),run:async(program,args)=>{
+ const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:'SYNTHETIC',deadline:1100,clock:()=>now,authorize:async input=>({authorized:true,keyID:f.key.keyID,objectDigest:hash(input.payload),expiresAt:1050}),effects:{preflight:async()=>{},pin:async t=>t.path,startAgent:async()=>({close:async()=>{}}),run:async(program,args)=>{
   if(program.endsWith('/op'))return Buffer.from(f.key.privateKey);
   if(args.includes('-L'))return Buffer.from(f.config.publicKey+'\n');
   if(args.includes('sign'))return Buffer.from(signed);
@@ -78,14 +78,14 @@ test('expired final verification cannot return an authorized signature',async()=
 });
 test('close waits for outstanding verification cleanup',async()=>{
  const f=await fixture();let started,release;const entered=new Promise(r=>{started=r;}),pending=new Promise(r=>{release=r;});let directory;
- const signer=await runtime.createOpGitSigner({config:f.config,deadline:Math.floor(Date.now()/1000)+60,authorize:async()=>{},effects:{pin:async t=>t.path,run:async(program,args,options)=>{directory=options.env.HOME;started();await pending;return Buffer.alloc(0);}}});
+ const signer=await runtime.createOpGitSigner({config:f.config,deadline:Math.floor(Date.now()/1000)+60,authorize:async()=>{},effects:{preflight:async()=>{},pin:async t=>t.path,run:async(program,args,options)=>{directory=options.env.HOME;started();await pending;return Buffer.alloc(0);}}});
  const verification=signer.verifyGit({payload:f.payload,signature:f.key.signature(f.payload)});await entered;
  let done=false;const closing=signer.close().then(()=>{done=true;});await new Promise(r=>setTimeout(r,10));assert.equal(done,false);
  release();await verification;await closing;assert.equal(existsSync(directory),false);f.key.privateKey.fill(0);
 });
 test('signing snapshots exact authorized payload before asynchronous key loading',async()=>{
  const f=await fixture(),input={type:'commit',payload:f.payload,authorization:{}};let signedPayload;
- const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:'SYNTHETIC',deadline:1100,clock:()=>1000,authorize:async value=>({authorized:true,keyID:f.key.keyID,objectDigest:hash(value.payload),expiresAt:1050}),effects:{pin:async t=>t.path,startAgent:async()=>({close:async()=>{}}),run:async(program,args,options)=>{
+ const signer=await runtime.createOpGitSigner({config:f.config,serviceToken:'SYNTHETIC',deadline:1100,clock:()=>1000,authorize:async value=>({authorized:true,keyID:f.key.keyID,objectDigest:hash(value.payload),expiresAt:1050}),effects:{preflight:async()=>{},pin:async t=>t.path,startAgent:async()=>({close:async()=>{}}),run:async(program,args,options)=>{
   if(program.endsWith('/op')){input.payload='MUTATED AFTER AUTHORIZATION';return Buffer.from(f.key.privateKey);}
   if(args.includes('-L'))return Buffer.from(f.config.publicKey+'\n');
   if(args.includes('sign')){signedPayload=options.input.toString();return Buffer.from(f.key.signature(signedPayload));}
@@ -93,3 +93,4 @@ test('signing snapshots exact authorized payload before asynchronous key loading
  }}});
  try{await signer.signGit(input);assert.equal(signedPayload,f.payload);}finally{await signer.close();f.key.privateKey.fill(0);}
 });
+
