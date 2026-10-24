@@ -6,7 +6,7 @@ export async function verifyJWT(token, issuer, audience, jwksURL, {fetcher = fet
   let header, claims;
   try { header = JSON.parse(new TextDecoder().decode(un64(parts[0]))); claims = JSON.parse(new TextDecoder().decode(un64(parts[1]))); } catch { fail('unauthorized', 401); }
   if (header.alg !== 'RS256' || typeof header.kid !== 'string' || header.kid.length > 256 || header.crit !== undefined || claims.iss !== issuer || !(claims.aud === audience || (Array.isArray(claims.aud) && claims.aud.includes(audience))) || !audience || !Number.isInteger(claims.exp) || claims.exp <= now || claims.exp > now+maxAge || !Number.isInteger(claims.iat) || claims.iat > now+30 || claims.iat < now-maxAge || claims.exp <= claims.iat || (claims.nbf !== undefined && (!Number.isInteger(claims.nbf) || claims.nbf > now+30))) fail('unauthorized', 401);
-  const response = await fetcher(jwksURL, {redirect:'error', signal:AbortSignal.timeout(10000)});
+  const response = await fetcher(jwksURL, {redirect:'manual', signal:AbortSignal.timeout(10000)});
   if (!response.ok) fail('identity-unavailable', 503);
   const jwks = JSON.parse(new TextDecoder().decode(await bounded(response.body, 65536)));
   const keys = jwks.keys?.filter(key => key.kid === header.kid && key.kty === 'RSA' && (!key.alg || key.alg === 'RS256') && (!key.use || key.use === 'sig'));
