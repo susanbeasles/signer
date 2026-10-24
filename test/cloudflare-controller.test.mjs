@@ -27,7 +27,7 @@ async function fixture(){
 
 test('disabled Cloudflare source has no public routes or installed authority/credential placeholders',()=>{
  const path=new URL('../cloudflare/wrangler.jsonc',import.meta.url);assert.ok(existsSync(path),'disabled controller config exists');const config=JSON.parse(readFileSync(path,'utf8'));
- assert.equal(config.name,'signing-control');assert.equal(config.workers_dev,false);assert.equal(config.preview_urls,false);assert.deepEqual(config.routes,[]);
+ assert.equal(config.name,'signer');assert.equal(config.workers_dev,false);assert.equal(config.preview_urls,false);assert.deepEqual(config.routes,[]);
  assert.deepEqual(config.vars,{ENABLED:'false',SIGNING_CONTROL_CONFIG_JSON:'{}'});assert.equal(config.services,undefined);
  assert.deepEqual(config.durable_objects.bindings,[{name:'SIGNING_CONTROL_STATE',class_name:'SigningControlRepository'}]);assert.equal(config.containers[0].class_name,'SigningControlRepository');
 });
@@ -184,3 +184,4 @@ test('operator installation selects exact allowlisted repository config and neve
  for(const services of [[f.config.service,f.config.service],[f.config.service,{...second,repository:f.config.service.repository}],Array.from({length:33},(_,i)=>({...second,repositoryID:i+1,repository:'fixture/repo'+i}))])assert.throws(()=>f.api.validateInstallation({...installation,services}));
  await assert.rejects(f.controller.execute({...f.job,input:{repositoryID:8}}));assert.equal(f.counts().starts,0);assert.equal(f.counts().tokenReads,0);
 });
+

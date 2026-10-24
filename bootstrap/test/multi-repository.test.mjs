@@ -5,13 +5,13 @@ import { exampleInput } from '../example.mjs';
 import { canonicalJson, compilePlan, createReviewRequest } from '../plan.mjs';
 import { completePublicFixture } from './public-fixture.mjs';
 
-test('one disabled image covers the seven explicitly recorded target repository identities', async () => {
+test('one disabled image covers the eight explicitly recorded target repository identities', async () => {
   const input = exampleInput();
   assert.deepEqual(input.runtime.services.map(({ repository, repositoryID }) => [repository, repositoryID]), [
     ['susanbeasles/ProsRUs',1412827677], ['susanbeasles/personal-control',1408909065],
     ['susanbeasles/backup-control',1407276404], ['susanbeasles/ghcaretaker',1405513776],
-    ['susanbeasles/workflow_depot',1405415683], ['susanbeasles/delivery_control',1405415291],
-    ['susanbeasles/repoctl',1404914851],
+    ['susanbeasles/workflow_depot',1405415683], ['susanbeasles/deployer',1405415291],
+    ['susanbeasles/repoctl',1404914851], ['susanbeasles/signer',1416201242],
   ]);
   const plan = await compilePlan(input);
   assert.deepEqual(plan.artifacts.imageRuntimeConfig, { services: input.runtime.services, runtime: input.runtime.runtime });
@@ -51,3 +51,4 @@ test('duplicate, unbounded, foreign and differently keyed repository entries fai
     await assert.rejects(compilePlan(input), { code:'invalid-public-input' });
   }
 });
+

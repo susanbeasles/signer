@@ -1,5 +1,5 @@
 {
-  "name": "signing-control",
+  "name": "signer",
   "main": "worker.mjs",
   "compatibility_date": "2026-10-08",
   "compatibility_flags": [
@@ -45,3 +45,4 @@
     }
   ]
 }
+

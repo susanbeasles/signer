@@ -1,125 +1,99 @@
-# Signing Control
+# signer
 
-This repository, `susanbeasles/signer`, owns the dedicated out-of-band
-Git signing service. Its Cloudflare Worker is named `signing-control`. The signer
-owns direct deployment of its Worker/container to Cloudflare.
+`susanbeasles/signer` owns the production Cloudflare Worker named `signer`.
+The native implementation is in `native/`; `npm run deploy` selects
+`deployment/native.mjs`. It uses a Worker and a SQLite Durable Object. It
+does not need a Container, 1Password account, exported signing key, or local
+privileged installation.
 
-The service is disabled by default and has no public route. The bootstrap UI
-prepares nonsecret, digest-bound review requests for separate setup operations.
-A review request is an intent to review; it is not an approval or a credential.
+## Security and lifecycle
 
-## Local checks
+The Durable Object generates Ed25519 identities as non-extractable CryptoKeys.
+Private signing keys exist only in memory. Durable storage contains public-key
+registration metadata, hashed session credentials, one-use grants and audit
+receipts. Eviction replaces a key instead of reconstructing it.
 
-Use Node.js 24 or later:
+GitHub App credentials and expiring user tokens are AES-GCM encrypted before
+durable storage. Their wrapping key must be supplied by the Cloudflare native
+`secret_key` binding `CREDENTIAL_WRAPPING_KEY`. Builds preserve that binding
+without reading its value. This is software isolation, not hardware-backed
+non-exportability or protection against a compromised signing runtime.
 
-```sh
-npm ci --ignore-scripts
-npm test
-```
+`/setup` and `/owner/*` independently validate owner Access JWTs using the exact
+configured audience, issuer, signature, expiry and owner email. GitHub manifest
+and OAuth callbacks validate browser-bound state, expiry and one-use custody.
+OAuth uses PKCE. The App requests only `git_signing_ssh_public_keys: write`.
+Signing-key administration uses a GitHub App user access token. Installation
+tokens are never used for user signing-key operations.
 
-Preview the public bootstrap review UI with `npm run preview:bootstrap`, then
-open `http://127.0.0.1:8765/`. It binds only to loopback and cannot make provider
-requests. To produce a self-contained offline page:
+Authorized remote sessions last at most 15 minutes. The owner can approve a
+remote bootstrap request at `/owner/pending` without handling its credential.
+GitHub Actions OIDC can mint a session only for explicitly configured actor,
+repository identity, event, audience and workflow allowlists. The default
+workflow allowlist is empty and the initial repository allowlist is only this
+repository. Broader access requires an owner-controlled policy configuration.
 
-```sh
-npm run bootstrap -- render --out /tmp/signing-control-review.html
-```
+Each signing grant binds exact unsigned Git commit bytes, repository name and
+numeric ID, caller identity, session, operation and expiry. Consumption is
+durable and transactional. Invalid, replayed, expired, cross-repository and
+revoked requests fail closed. Session and grant credentials are never logged.
 
-The output path must be new. See `bootstrap/README.md` for the public input
-schema and individual operation review commands.
+Expired private identities are discarded. Public registrations are retained
+for a 24-hour publication window, then reconciled and removed only when both
+their recorded title and public key match. GitHub preserves already-created
+verification records after revocation. Commits published for the first time
+after their signing key is removed may not verify. An SSH commit signature
+does not prevent someone copying that same signed object into another
+repository; repository authorization is enforced by this service and its
+receipts. Publication requires separate repository credentials and protections.
 
-Tests use synthetic fixtures. They must not use a live 1Password account,
-register a key, or mutate GitHub or Cloudflare resources.
+## Remote Git integration
 
-## Components
+Use Node 24 and Git with SSH signature support. No signing private key is
+installed on the remote agent. `native/client.mjs` implements Git's SSH signing
+program protocol, including temporary commit-buffer and `.sig` handling, and
+independently verifies each returned signature. It supports UTF-8 commit
+messages and rejects unsupported commit headers and signatures on tags.
 
-* `bootstrap/` contains the public configuration compiler and review UI.
-* `src/service/` composes exact Git object policy, source verification,
-  durable reservations, signing, and independent evidence capabilities.
-* `runtime/` implements the pinned official `op` to ephemeral SSH agent path.
-* `cloudflare/` contains the private Worker and disposable container controller.
+`native/agent.mjs --repository susanbeasles/signer -- command [args]` obtains
+owner approval or uses an upstream workload JWT in `SIGNER_WORKLOAD_TOKEN`,
+then gives the short-lived session only to its child process environment.
+It never prints that session. It configures the child process's Git signing
+program and public signing key through process-scoped Git configuration;
+it does not modify global or repository Git configuration.
+The returned public identity may rotate after eviction; the adapter verifies
+the new signature before returning it to Git. Missing authorization prevents
+commit creation instead of creating an unsigned commit.
 
-The runtime accepts an immutable vault/item reference, an independently pinned
-public key, and exact executable hashes. Its dedicated service-account token
-belongs only in the private credential handoff. The fixed `op` subprocess gets
-that token; SSH tools and Git do not. The private key travels through a pipe to
-an ephemeral agent, never a command argument or a persistent key file.
+## Deployment and commissioning
 
-Automated SSH signing is separate from owner hardware approval. The service
-does not convert a software key, an ordinary signature, or a caller boolean
-into hardware provenance. Missing independent policy or evidence capabilities
-deny the operation.
+Cloudflare Builds must run tests and `npm run deploy` for `main`. Deployment
+refuses a source SHA that differs from current main or lacks GitHub's verified
+signature. It bundles one immutable module, records its SHA-256, preserves
+native key custody, disables invocation URL logs, redacts query strings, and
+reads back the installed source/artifact identities and deployment record.
+`/health` exposes only nonsecret deployment identity and authorization status.
 
-## Source publication
+Commission the native wrapping-key binding, the owner Access application for
+`/owner/*` and `/setup`, its `ACCESS_AUD`, and the repository's Cloudflare Builds
+trigger before production deployment. App registration and owner consent then
+run through `/setup` and official GitHub consent screens. Runtime credentials
+must never be injected into a build environment.
 
-Feature signing runs in the standalone Cloudflare signer. workflow_depot
-owns the accepted producer policy and automatically authorizes eligible exact
-commit intents; no per-feature owner approval is added. The request binds the
-repository, parent, producer-claimed tree hash, feature ref, author, committer,
-message, nonce, expiry, and pinned signing key. A digest binds those exact
-canonical commit bytes; the signer signs the commit bytes, not the digest text.
+The older `cloudflare/`, `runtime/`, `bootstrap/` and container deployment APIs
+remain for protocol regression coverage and migration review. Their versioned
+schemas and internal callback names are preserved. They are not selected by
+the production deploy command. Do not activate the old Container path.
 
-This signature proves an authenticated, policy-eligible producer intent. It
-does not claim that source contents were transferred, inspected, or scanned.
-The feature path needs neither a local Git store beside the signer nor the
-later CI, scan, review, hardware-approval, or publication capabilities. Missing
-or revoked depot producer authorization prevents key access. The signer stores
-an irreversible reservation before consuming the one-use depot grant, and
-retains uncertainty after an ambiguous result instead of signing again.
+Retire the deployed legacy Worker `signing-control` only after the canonical
+Worker has passed live authorization, signing, GitHub verification, rotation,
+restart, negative tests and automatic-deployment checks. Passing local tests
+or merging this source does not establish that commissioning is complete.
 
-The response contains a signature and a receipt. The separately authorized
-producer assembles the signed commit locally, verifies the pinned key, exact
-metadata and object hash, and uses normal Git for publication. Source files,
-blobs, trees, and history archives never travel through signer RPC or R2.
-`lookupFeature` can return only the exact retained signed commit metadata.
+## Verification
 
-Promotion signing remains a separate path starting from an existing source PR.
-It still requires independently verified source objects, CI, complete scans,
-review, and the existing owner approvals before promotion. Feature signing does
-not grant main writes or bypass those gates.
-
-## Commissioning state
-
-No dedicated vault, signing key, service account, public-key registration,
-deployed signer, or activated policy is created by this package. Actual public
-identities, immutable image and toolchain hashes, private capability bindings,
-and resource readbacks are required before activation. Each security-sensitive
-setup operation needs its own explicit authorization.
-
-The separate, pending four-Worker pipeline bootstrap does not include this
-signer or any signing credential. A local test result is not evidence that
-production authentication, signing, publication, or deployment works.
-
-## Fixed integration lifecycle
-
-workflow_depot owns the private IntegrationActions entrypoint and durable
-repository-scoped reconciliation. It invokes this standalone signer through the
-private SourceActions binding. Working PRs map to `int/<working-branch>`; source or main
-changes close/delete/recreate that ref and its PR. Each eligible candidate has
-exactly one parent, current main, and one signed squash commit. Empty changes
-retire any previous integration. Durable operation IDs prevent blind signing
-retries after uncertain outcomes.
-
-This source is disabled and uncommissioned. Activation requires accepted source-PR-scoped policy and integrationIntent capability, trusted
-read credentials, signer/publisher bindings, webhook installation, a configured
-candidate admission endpoint, and qualified provider protection rules. No live
-keys, secrets, deployments or protection settings were changed by this work.
-
-## Deployment ownership
-
-This repository owns its own deployment directly to Cloudflare. It does not
-require delivery_control to deploy the signer. Shared integration orchestration
-and signing eligibility policy remain owned by workflow_depot. The Cloudflare
-Worker and isolated signing container stay in this standalone repository.
-
-Once the Cloudflare Workers Builds production trigger is commissioned, a verified
-signed push to `main` runs Cloudflare's build/test and directly deploys the
-matching Worker and isolated Container. GitHub Actions performs credential-free
-source validation; it cannot dispatch or deploy the signer. The Cloudflare
-build token and 1Password runtime signing credentials remain in their separate,
-scoped provider custody.
-
-See [deployment setup](deployment/README.md) for the reviewed one-time inputs
-and verified blockers. The disabled `cloudflare/wrangler.jsonc` remains a
-reference template; the release script generates the enabled configuration.
-A source merge alone is not a live deployment or evidence of commissioned signing.
+`node --test test/native-signer.test.mjs test/native-deployment.test.mjs` runs
+the dependency-free native tests, including an actual signed Git commit and
+OpenSSH verification. `npm test` also runs the preserved regression suite and
+the real Workerd ingress tests through the pinned esbuild/Miniflare toolchain.
+Tests use synthetic credentials and must not mutate live provider resources.

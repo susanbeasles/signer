@@ -6,7 +6,7 @@ export function exampleInput() {
     ownerOrigin: 'https://control.vespoli.me',
     source: { repository: 'susanbeasles/signer', repositoryID: null, commit: null, artifactSha256: null },
     onePassword: { accountDomain: null, vaultName: null, vaultID: null, itemName: 'gh-signing-key', itemID: null, serviceAccountID: null },
-    github: { login: 'susanbeasles', accountID: '215839550', title: 'signing-control', publicKey: null },
+    github: { login: 'susanbeasles', accountID: '215839550', title: 'signer', publicKey: null },
     runtime: {
       // Public metadata recorded in source-publication-github-identities.json.
       // Inclusion here is a disabled commissioning proposal, not policy approval.
@@ -33,3 +33,4 @@ export function exampleInput() {
     },
   };
 }
+

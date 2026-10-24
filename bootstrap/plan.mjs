@@ -82,7 +82,7 @@ export async function validatePublicInput(input) {
   for (const id of ['vaultID', 'itemID', 'serviceAccountID']) nullable(op[id], x => matches(x, ID));
   const github = input.github;
   exact(github, ['login', 'accountID', 'title', 'publicKey']);
-  if (github.login !== 'susanbeasles' || github.accountID !== '215839550' || github.title !== 'signing-control') fail();
+  if (github.login !== 'susanbeasles' || github.accountID !== '215839550' || github.title !== 'signer') fail();
   const fingerprint = github.publicKey === null ? null : await publicKeyFingerprint(github.publicKey);
   const runtime = input.runtime;
   exact(runtime, ['services', 'runtime', 'platform']);
@@ -140,9 +140,9 @@ export async function compilePlan(raw) {
   const { services, runtime, platform } = input.runtime;
   const configDigest = await sha256(canonicalJson({ services, runtime, platform }));
   const repositoryConfigDigests = Object.fromEntries(await Promise.all(services.map(async service => [String(service.repositoryID), await sha256(canonicalJson({ service, runtime, platform }))])));
-  const image = platform.imageDigest === null ? null : `registry.cloudflare.com/${ACCOUNT_ID}/signing-control@${platform.imageDigest}`;
+  const image = platform.imageDigest === null ? null : `registry.cloudflare.com/${ACCOUNT_ID}/signer@${platform.imageDigest}`;
   const wrangler = {
-    name: 'signing-control', main: 'cloudflare/worker.mjs', account_id: ACCOUNT_ID,
+    name: 'signer', main: 'cloudflare/worker.mjs', account_id: ACCOUNT_ID,
     compatibility_date: '2026-10-08', compatibility_flags: ['nodejs_compat'], workers_dev: false, preview_urls: false, routes: [], observability: { enabled: false },
     durable_objects: { bindings: [{ name: 'SIGNING_CONTROL_STATE', class_name: 'SigningControlRepository' }] },
     migrations: [{ tag: 'signing-control-v1', new_sqlite_classes: ['SigningControlRepository'] }],
@@ -154,9 +154,9 @@ export async function compilePlan(raw) {
   const artifactDigests = Object.fromEntries(await Promise.all(Object.entries(artifacts).map(async ([name, value]) => [name, await sha256(artifactText(value))])));
   const op = input.onePassword;
   const actions = [
-    ['cloudflare.worker.install', 'Private Worker', { accountID: ACCOUNT_ID, worker: 'signing-control', source: input.source, ingress: 'private-service-bindings-only', artifactDigests }, ['source-provenance', 'exact-source-artifact-readback', 'existing-depot-deployment-authorization']],
-    ['cloudflare.durable-objects.migrate', 'Durable Object state', { accountID: ACCOUNT_ID, worker: 'signing-control', binding: 'SIGNING_CONTROL_STATE', className: 'SigningControlRepository', migrations: wrangler.migrations }, ['existing-migration-history-readback', 'worker-and-container-operation-authorizations']],
-    ['cloudflare.container.configure', 'Dedicated container', { accountID: ACCOUNT_ID, worker: 'signing-control', className: 'SigningControlRepository', image, maxInstances: 1 }, ['image-provenance-and-digest-readback', 'runtime-isolation-verification', 'source-policy-private-binding', 'depot-producer-OIDC-admission']],
+    ['cloudflare.worker.install', 'Private Worker', { accountID: ACCOUNT_ID, worker: 'signer', source: input.source, ingress: 'private-service-bindings-only', artifactDigests }, ['source-provenance', 'exact-source-artifact-readback', 'existing-depot-deployment-authorization']],
+    ['cloudflare.durable-objects.migrate', 'Durable Object state', { accountID: ACCOUNT_ID, worker: 'signer', binding: 'SIGNING_CONTROL_STATE', className: 'SigningControlRepository', migrations: wrangler.migrations }, ['existing-migration-history-readback', 'worker-and-container-operation-authorizations']],
+    ['cloudflare.container.configure', 'Dedicated container', { accountID: ACCOUNT_ID, worker: 'signer', className: 'SigningControlRepository', image, maxInstances: 1 }, ['image-provenance-and-digest-readback', 'runtime-isolation-verification', 'source-policy-private-binding', 'depot-producer-OIDC-admission']],
     ['onepassword.vault-reference.bind', 'Dedicated 1Password vault', { accountDomain: op.accountDomain, vaultName: op.vaultName, vaultID: op.vaultID }, ['exact-vault-metadata-readback', 'dedicated-vault-scope-verification']],
     ['onepassword.item-reference.bind', 'Signing item reference', { accountDomain: op.accountDomain, vaultID: op.vaultID, itemName: op.itemName, itemID: op.itemID, opRef: runtime.opRef, publicKeyFingerprint: runtime.keyID }, ['exact-item-and-field-ID-metadata-readback', 'public-key-provenance-verification']],
     ['onepassword.service-account-reference.bind', 'Service account reference', { accountDomain: op.accountDomain, serviceAccountID: op.serviceAccountID, vaultIDs: op.vaultID ? [op.vaultID] : [], permissions: ['read_items'], destinationBinding: 'SIGNER_SERVICE_ACCOUNT_TOKEN', custody: 'cloudflare-secrets-store-service-account-token-only' }, ['dedicated-account-and-exact-vault-permission-readback', 'separate-owner-authorized-secure-token-provisioning']],
@@ -182,3 +182,4 @@ export async function createReviewRequest(input, expectedDigest, operationID) {
   if (!operation) fail('unknown-operation');
   return { schema: 'signing-control-bootstrap-review/v1', kind: 'unauthenticated-review-request', planDigest: plan.digest, inputDigest: plan.inputDigest, configDigest: plan.configDigest, operationID, operationDigest: operation.digest, operation, blockers: plan.blockers, promotionPrerequisites: plan.promotionPrerequisites };
 }
+
