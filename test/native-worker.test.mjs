@@ -10,7 +10,7 @@ test('real Workerd serves setup after verifying an owner Access assertion',{time
   const parts=[{alg:'RS256',kid:'owner-test'},{iss:'https://vespoli.cloudflareaccess.com',aud:[audience],iat:now,exp:now+1800,email:'anthonyvespoli@gmail.com',sub:'synthetic-owner'}].map(v=>b64url(encode(JSON.stringify(v))));
   const token=parts.join('.')+'.'+b64url(await crypto.subtle.sign('RSASSA-PKCS1-v1_5',pair.privateKey,encode(parts.join('.'))));
   const built=await build({entryPoints:[new URL('../native/worker.mjs',import.meta.url).pathname],bundle:true,write:false,format:'esm',platform:'neutral',external:['cloudflare:workers']});
-  const runtime=new Miniflare(convertV4MiniflareOptions({cf:false,modules:true,script:built.outputFiles[0].text,compatibilityDate:'2026-10-13',bindings:{ACCESS_AUD:audience},durableObjects:{SIGNER:{className:'Signer',useSQLite:true}},outboundService:request=>{
+  const runtime=new Miniflare(convertV4MiniflareOptions({cf:false,modules:true,script:built.outputFiles[0].text.replaceAll('catch (error) {','catch (error) { console.error(error);').replaceAll('} catch {','} catch (error) { console.error(error);'),compatibilityDate:'2026-10-13',bindings:{ACCESS_AUD:audience},durableObjects:{SIGNER:{className:'Signer',useSQLite:true}},outboundService:request=>{
     assert.equal(request.url,'https://vespoli.cloudflareaccess.com/cdn-cgi/access/certs');
     return Response.json({keys:[{...jwk,kid:'owner-test'}]});
   }}));
