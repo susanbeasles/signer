@@ -21,7 +21,7 @@ import {completePublicFixture} from '../bootstrap/test/public-fixture.mjs';
 async function fixture(){
  const publicInput=await completePublicFixture();const input={schema:'signing-control-deployment/v1',accountID:publicInput.accountID,baseImage:'registry.example/base@sha256:'+'a'.repeat(64),nodeSHA256:'b'.repeat(64),setprivSHA256:'c'.repeat(64),imageConfig:{services:publicInput.runtime.services,runtime:publicInput.runtime.runtime},signerTokenSecret:{store_id:'a'.repeat(32),secret_name:'signer-op-service-account'},bindings:[{binding:'SOURCE_POLICY',service:'fixture-policy',entrypoint:'SourceFeaturePolicy'}]};
  const root=await mkdtemp(join(tmpdir(),'signer-deploy-test-'));const env={PATH:process.env.PATH,WORKERS_CI:'1',CI:'true',WORKERS_CI_BRANCH:'main',WORKERS_CI_COMMIT_SHA:'d'.repeat(40),CLOUDFLARE_API_TOKEN:'synthetic-cloudflare',SIGNING_DEPLOYMENT_JSON:JSON.stringify(input)};
- const image='registry.cloudflare.com/'+input.accountID+'/signing-control@sha256:'+'e'.repeat(64);const calls=[];let deployed,existing=true,activeSecret=true,secretScope='workers',incorrectBinding=false,mainReads=0,stale=false,unsigned=false;const tokenBinding={name:'SIGNER_SERVICE_ACCOUNT_TOKEN',type:'secrets_store_secret',...input.signerTokenSecret};
+ const image='registry.cloudflare.com/'+input.accountID+'/signer@sha256:'+'e'.repeat(64);const calls=[];let deployed,existing=true,activeSecret=true,secretScope='workers',incorrectBinding=false,mainReads=0,stale=false,unsigned=false;const tokenBinding={name:'SIGNER_SERVICE_ACCOUNT_TOKEN',type:'secrets_store_secret',...input.signerTokenSecret};
  const readJSON=async url=>{
   if(url.includes('/git/ref/heads/main')){mainReads++;return {object:{sha:stale&&mainReads>1?'f'.repeat(40):env.WORKERS_CI_COMMIT_SHA}};}
   if(url.startsWith('https://api.github.com/')&&url.includes('/commits/'))return {sha:env.WORKERS_CI_COMMIT_SHA,commit:{verification:{verified:!unsigned}}};
@@ -67,7 +67,7 @@ test('native Secrets Store binding is retained without copying its value into th
 test('initial commissioning accepts a previously absent Worker only with an active scoped secret',async()=>{
  const f=await fixture();f.setMissing();try{
    const result=await api.deploy(f);
-   assert.equal(result.worker,'signing-control');
+   assert.equal(result.worker,'signer');
    assert.equal(f.calls.filter(x=>x.args[1]==='deploy').length,1);
    assert.deepEqual(await readdir(f.root),[]);
  }finally{await f.cleanup();}
@@ -86,7 +86,7 @@ test('existing Worker with different signer credential fails closed before any m
 });
 test('disabled bootstrap placeholder may be upgraded only with an active scoped token',async()=>{
  const f=await fixture();f.setDormant();
- try{const result=await api.deploy(f);assert.equal(result.worker,'signing-control');}
+ try{const result=await api.deploy(f);assert.equal(result.worker,'signer');}
  finally{await f.cleanup();}
 });
 test('main advancing during image publication prevents Worker deployment and cleans generated files',async()=>{
@@ -106,3 +106,4 @@ test('a signer runtime credential on the build runner is rejected before provide
   assert.equal(f.calls.length,0);
  }finally{await f.cleanup();}
 });
+

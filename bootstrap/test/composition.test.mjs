@@ -56,7 +56,8 @@ test('generated deployment shape matches the maintained private Wrangler configu
     main: posix.join('cloudflare', maintained.main),
     account_id: input.accountID,
     vars: { ...maintained.vars, SIGNING_CONTROL_CONFIG_JSON: canonicalJson(input.runtime) },
-    containers: maintained.containers.map(container => ({ ...container, image: `registry.cloudflare.com/${input.accountID}/signing-control@${input.runtime.platform.imageDigest}` })),
+    containers: maintained.containers.map(container => ({ ...container, image: `registry.cloudflare.com/${input.accountID}/signer@${input.runtime.platform.imageDigest}` })),
   };
   assert.deepEqual(plan.artifacts.wrangler, expected);
 });
+

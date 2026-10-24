@@ -1,5 +1,5 @@
 {
-  "name": "signing-control",
+  "name": "signer",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "test:bootstrap": "node --test bootstrap/test/*.test.mjs",
     "preview:bootstrap": "node bootstrap/cli.mjs preview --port 8765",
     "bootstrap": "node bootstrap/cli.mjs",
-    "deploy": "node deployment/deploy.mjs"
+    "deploy": "node deployment/native.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.1",
@@ -19,3 +19,4 @@
     "wrangler": "4.149.0"
   }
 }
+
