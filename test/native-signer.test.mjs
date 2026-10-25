@@ -137,3 +137,9 @@ test('GitHub provider redirects are rejected without following or forwarding cre
   await assert.rejects(github.request('/user',{token:'synthetic'}),/provider-request-failed/);
   assert.equal(calls,1);
 });
+
+test('registration never retries an uncertain exchange created by the fixed client',async()=>{
+ const storage=new Storage();await storage.put('app-registration-in-flight',{started:Date.now()+60000});
+ let calls=0;const github=new GitHub(storage,null,async()=>{calls++;throw Error('must not dispatch')});
+ await assert.rejects(github.register('synthetic-code'),/registration-recovery-required/);assert.equal(calls,0);
+});
