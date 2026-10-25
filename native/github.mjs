@@ -1,6 +1,9 @@
 import {OWNER, OWNER_ID, ORIGIN, encode, b64url, bounded, digest, fail, random} from './protocol.mjs';
 import {seal, open} from './sealed.mjs';
 const VERSION = '2026-03-10';
+// Earlier deployed versions could not dispatch native fetch (unsupported redirect mode,
+// then an invalid receiver). Only locks predating this fix can be recovered safely.
+const LEGACY_REGISTRATION_CUTOFF = 1792898971798;
 export function manifest() {
   return {name:'signer-'+Array.from(crypto.getRandomValues(new Uint8Array(6)),byte=>byte.toString(16).padStart(2,'0')).join(''),url:ORIGIN,public:false,description:'Remote Git commit signing',hook_attributes:{url:ORIGIN+'/github/events',active:false},redirect_url:ORIGIN+'/github/manifest',callback_urls:[ORIGIN+'/github/callback'],default_permissions:{git_signing_ssh_public_keys:'write'},default_events:[],request_oauth_on_install:false};
 }
@@ -19,7 +22,7 @@ export class GitHub {
   }
   async register(code) {
     if (await this.storage.get('app')) fail('app-already-registered',409);
-    await this.storage.transaction(async tx=>{if(await tx.get('app-registration-in-flight'))fail('registration-recovery-required',409);await tx.put('app-registration-in-flight',{started:Date.now()});});
+    await this.storage.transaction(async tx=>{const pending=await tx.get('app-registration-in-flight');if(pending && !(Number.isFinite(pending.started) && pending.started<LEGACY_REGISTRATION_CUTOFF))fail('registration-recovery-required',409);await tx.put('app-registration-in-flight',{started:Date.now()});});
     const app=await this.request('/app-manifests/'+code+'/conversions',{method:'POST'});
     if (String(app.owner?.id)!==OWNER_ID || app.owner?.login!==OWNER || !Number.isSafeInteger(app.id) || typeof app.client_id!=='string' || typeof app.client_secret!=='string' || typeof app.pem!=='string' || app.permissions?.git_signing_ssh_public_keys!=='write') fail('app-owner-or-permissions-denied');
     const metadata={id:app.id,clientID:app.client_id,slug:app.slug,owner:OWNER,permissions:app.permissions};
