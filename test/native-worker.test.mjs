@@ -35,3 +35,12 @@ test('real Workerd rejects unauthenticated signing, owner actions, forged callba
     const redeem=await runtime.dispatchFetch(ORIGIN+'/v1/redeem',{method:'POST',body:JSON.stringify({id:pending.id,secret:pending.secret})});assert.equal(redeem.status,409);assert.equal((await redeem.json()).error,'owner-approval-pending');
   }finally{await runtime.dispose();}
 });
+
+test('real Workerd GitHub client uses native fetch without a receiver error',{timeout:30000},async()=>{
+  const built=await build({stdin:{contents:"import {GitHub} from './native/github.mjs';\nexport default {async fetch(){try{return Response.json(await new GitHub({},null).request('/user'));}catch(e){return Response.json({name:e.name,message:e.message},{status:503});}}};",resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'neutral'});
+  const runtime=new Miniflare(convertV4MiniflareOptions({cf:false,modules:true,script:built.outputFiles[0].text,compatibilityDate:'2026-10-13',outboundService:request=>{
+    assert.equal(request.url,'https://api.github.com/user');return Response.json({id:215839550});
+  }}));
+  try{const response=await runtime.dispatchFetch(ORIGIN+'/');const body=await response.text();assert.equal(response.status,200,body);}
+  finally{await runtime.dispose();}
+});
