@@ -81,3 +81,30 @@ test('OAuth callbacks retain independent browser bindings across concurrent setu
    }
  }finally{await runtime.dispose();}
 });
+
+test('actual OAuth routes complete two concurrent flows and reject replay',{timeout:30000},async()=>{
+ const built=await build({stdin:{contents:"import {Signer} from './native/worker.mjs';\nexport class TestSigner extends Signer{\n async owner(){return {subject:'synthetic-owner'};}\n async seed(){\n this.service.github.key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);\n await this.ctx.storage.put('app',{clientID:'synthetic-client'});\n await this.service.github.save('app',{clientSecret:'synthetic-secret'});\n }\n}\nexport default{async fetch(request,env){const stub=env.SIGNER.getByName('test');if(new URL(request.url).pathname==='/test-seed'){await stub.seed();return new Response('seeded');}return stub.handle(request);}};",resolveDir:process.cwd()},bundle:true,write:false,format:'esm',platform:'neutral',external:['cloudflare:workers']});
+ const runtime=new Miniflare(convertV4MiniflareOptions({cf:false,modules:true,script:built.outputFiles[0].text,compatibilityDate:'2026-10-13',durableObjects:{SIGNER:{className:'TestSigner',useSQLite:true}},outboundService:request=>{
+ const u=new URL(request.url);
+ if(u.origin==='https://github.com' && u.pathname==='/login/oauth/access_token')return Response.json({access_token:'synthetic-access',refresh_token:'synthetic-refresh',expires_in:3600,refresh_token_expires_in:7200});
+ if(u.origin==='https://api.github.com' && u.pathname==='/user')return Response.json({id:215839550,login:'susanbeasles'});
+ if(u.origin==='https://api.github.com' && u.pathname==='/user/ssh_signing_keys')return Response.json([]);
+ throw Error('Unexpected outbound request');
+ }}));
+ try{
+ await runtime.dispatchFetch(ORIGIN+'/test-seed');
+ const first=await runtime.dispatchFetch(ORIGIN+'/owner/authorize',{redirect:'manual'});
+ const second=await runtime.dispatchFetch(ORIGIN+'/owner/authorize',{redirect:'manual'});
+ assert.equal(first.status,302);assert.equal(second.status,302);
+ const cookies=[first,second].map(r=>r.headers.get('set-cookie').split(';')[0]);
+ assert.notEqual(cookies[0].split('=')[0],cookies[1].split('=')[0]);
+ for(let i=0;i<2;i++){
+ const state=new URL([first,second][i].headers.get('location')).searchParams.get('state');
+ const url=ORIGIN+'/github/callback?state='+state+'&code=synthetic-code';
+ const r=await runtime.dispatchFetch(url,{headers:{cookie:cookies.join('; ')}});
+ assert.equal(r.status,200,await r.text());assert.match(r.headers.get('set-cookie'),/Max-Age=0/);
+ assert.ok(r.headers.get('set-cookie').startsWith(cookies[i].split('=')[0]+'=;'));
+ const replay=await runtime.dispatchFetch(url,{headers:{cookie:cookies.join('; ')}});assert.equal((await replay.json()).error,'state-denied');
+ }
+ }finally{await runtime.dispose();}
+});
