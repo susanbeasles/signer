@@ -139,7 +139,13 @@ test('GitHub provider redirects are rejected without following or forwarding cre
 });
 
 test('registration never retries an uncertain exchange created by the fixed client',async()=>{
- const storage=new Storage();await storage.put('app-registration-in-flight',{started:Date.now()+60000});
+ const storage=new Storage();await storage.put('app-registration-in-flight',{version:1,started:Date.now()+60000});
+ let calls=0;const github=new GitHub(storage,null,async()=>{calls++;throw Error('must not dispatch')});
+ await assert.rejects(github.register('synthetic-code'),/registration-recovery-required/);assert.equal(calls,0);
+});
+
+test('versioned registration locks remain blocked even with old timestamps',async()=>{
+ const storage=new Storage();await storage.put('app-registration-in-flight',{version:1,started:1});
  let calls=0;const github=new GitHub(storage,null,async()=>{calls++;throw Error('must not dispatch')});
  await assert.rejects(github.register('synthetic-code'),/registration-recovery-required/);assert.equal(calls,0);
 });
