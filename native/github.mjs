@@ -10,7 +10,7 @@ export class GitHub {
   async save(name, value) { await this.storage.put('sealed:'+name,await seal(this.key,name,value)); }
   async request(path, {method='GET',token,body,oauth=false} = {}) {
     if (!((oauth && path==='/login/oauth/access_token') || (!oauth && (/^\/app-manifests\/[A-Za-z0-9_-]{10,200}\/conversions$/.test(path) || /^\/user(?:\/ssh_signing_keys(?:\/[0-9]+)?(?:\?per_page=100&page=[0-9]+)?)?$/.test(path) || /^\/repos\/susanbeasles\/[A-Za-z0-9_.-]+$/.test(path))))) fail('provider-path-denied');
-    const res=await this.fetcher((oauth?'https://github.com':'https://api.github.com')+path,{method,redirect:'error',signal:AbortSignal.timeout(15000),headers:{accept:'application/json','user-agent':'signer','x-github-api-version':VERSION,...(token?{authorization:'Bearer '+token}:{}),...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
+    const res=await this.fetcher((oauth?'https://github.com':'https://api.github.com')+path,{method,redirect:'manual',signal:AbortSignal.timeout(15000),headers:{accept:'application/json','user-agent':'signer','x-github-api-version':VERSION,...(token?{authorization:'Bearer '+token}:{}),...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
     const raw=await bounded(res.body,262144);
     if (!res.ok) throw Object.assign(new Error('provider-request-failed'),{status:503,providerStatus:res.status});
     if (res.status===204) return null;

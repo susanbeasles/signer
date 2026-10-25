@@ -127,3 +127,13 @@ test('actual git commit -S invokes the SSH adapter and OpenSSH verifies its sign
     assert.equal(verified,'');assert.match(await git('cat-file','commit','HEAD'),/gpgsig -----BEGIN SSH SIGNATURE-----/);
   }finally{await new Promise(resolve=>server.close(resolve));await rm(directory,{recursive:true,force:true});}
 });
+
+test('GitHub provider redirects are rejected without following or forwarding credentials',async()=>{
+  let calls=0;
+  const github=new GitHub(new Storage(),null,async(url,options)=>{
+    calls++;assert.equal(options.redirect,'manual');
+    return new Response(null,{status:302,headers:{location:'https://foreign.invalid/'}});
+  });
+  await assert.rejects(github.request('/user',{token:'synthetic'}),/provider-request-failed/);
+  assert.equal(calls,1);
+});
