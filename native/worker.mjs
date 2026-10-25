@@ -7,12 +7,18 @@ const cookieName='__Host-signer';
 const securityHeaders={'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','content-security-policy':"default-src 'none'; form-action 'self' https://github.com; base-uri 'none'; frame-ancestors 'none'"};
 const escape=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function html(value,headers={}){return new Response('<!doctype html><meta charset="utf-8"><title>signer</title>'+value,{headers:{...securityHeaders,'content-type':'text/html;charset=utf-8',...headers}});}
-function cookie(value){return `${cookieName}=${value}; Secure; HttpOnly; Path=/; SameSite=Lax; Max-Age=600`;}
+function cookie(value,name=cookieName+'-'+value){return `${name}=${value}; Secure; HttpOnly; Path=/; SameSite=Lax; Max-Age=${value?600:0}`;}
 function callback(request,url){
+  const deny=reason=>{throw Object.assign(new Error('callback-denied'),{status:403,reason});};
   const state=url.searchParams.get('state'),code=url.searchParams.get('code');
+  if(url.searchParams.getAll('state').length!==1||!state||!/^[A-Za-z0-9_-]{43}$/.test(state))deny('state');
+  if(url.searchParams.getAll('code').length!==1||!code||!/^[A-Za-z0-9_-]{10,200}$/.test(code))deny('code');
+  if([...url.searchParams.keys()].some(k=>!['state','code'].includes(k)))deny('parameters');
   const cookies=(request.headers.get('cookie')||'').split(';').map(x=>x.trim());
-  if(!state||!/^[A-Za-z0-9_-]{43}$/.test(state)||!cookies.includes(cookieName+'='+state)||!code||!/^[A-Za-z0-9_-]{10,200}$/.test(code)||[...url.searchParams.keys()].some(k=>!['state','code'].includes(k))||url.searchParams.getAll('state').length!==1||url.searchParams.getAll('code').length!==1)fail('callback-denied');
-  return {state,code};
+  const names=[cookieName+'-'+state,cookieName];
+  const matching=cookies.filter(value=>names.some(name=>value===name+'='+state));
+  if(matching.length!==1)deny('cookie');
+  return {state,code,cookieKey:matching[0].slice(0,matching[0].indexOf('='))};
 }
 const bearer=request=>{const value=request.headers.get('authorization')||'';if(!/^Bearer [A-Za-z0-9._-]{43,12288}$/.test(value))fail('unauthorized',401);return value.slice(7);};
 export class Signer extends DurableObject {
@@ -44,17 +50,17 @@ export class Signer extends DurableObject {
         return html(`<h1>Register signer</h1><form action="https://github.com/settings/apps/new?state=${state}" method="post"><input type="hidden" name="manifest" value="${escape(JSON.stringify(manifest()))}"><button>Continue to GitHub</button></form>`,{'set-cookie':cookie(state)});
       }
       if(request.method==='GET'&&path==='/github/manifest'){
-        const {state,code}=callback(request,url);await this.service.github.consumeState('manifest',state);
+        const {state,code,cookieKey}=callback(request,url);await this.service.github.consumeState('manifest',state);
         await this.service.github.register(code);
-        return html('<p>GitHub App registered.</p><a href="/owner/authorize">Authorize GitHub account</a>',{'set-cookie':cookie('')});
+        return html('<p>GitHub App registered.</p><a href="/owner/authorize">Authorize GitHub account</a>',{'set-cookie':cookie('',cookieKey)});
       }
       if(request.method==='GET'&&path==='/owner/authorize'){
         await this.owner(request);await this.service.rate('owner-authorize',5);
         const next=await this.service.github.oauthStart();return new Response(null,{status:302,headers:{...securityHeaders,location:next.url,'set-cookie':cookie(next.state)}});
       }
       if(request.method==='GET'&&path==='/github/callback'){
-        const {code,state}=callback(request,url);await this.service.github.oauthComplete(code,state);
-        return html('<h1>signer authorized</h1><p>GitHub signing-key administration is enabled.</p>',{'set-cookie':cookie('')});
+        const {code,state,cookieKey}=callback(request,url);await this.service.github.oauthComplete(code,state);
+        return html('<h1>signer authorized</h1><p>GitHub signing-key administration is enabled.</p>',{'set-cookie':cookie('',cookieKey)});
       }
       if(path.startsWith('/owner/')){
         const owner=await this.owner(request);
@@ -87,7 +93,7 @@ export class Signer extends DurableObject {
         return output(result);
       }
       fail('not-found',404);
-    }catch(error){return output({error:error.status?error.message:'unavailable'},error.status||503);}
+    }catch(error){return output({error:error.status?error.message:'unavailable',...(error.message==='callback-denied'?{reason:error.reason}:{})},error.status||503);}
   }
   async alarm(){try{await this.service.cleanup();}finally{await this.ctx.storage.setAlarm(Date.now()+60000);}}
   fetch(){return output({error:'not-found'},404);}

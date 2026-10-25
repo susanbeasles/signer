@@ -63,3 +63,21 @@ test('real Workerd completes encrypted registration, OAuth and signing-key admin
  try{const response=await runtime.dispatchFetch(ORIGIN+'/');const body=await response.text();assert.equal(response.status,200,body);assert.deepEqual(JSON.parse(body),{registered:true,authorized:true,sealed:true,id:456});assert.equal(publicKey,null);}
  finally{await runtime.dispose();}
 });
+
+test('OAuth callbacks retain independent browser bindings across concurrent setup tabs',{timeout:30000},async()=>{
+ const built=await build({entryPoints:[new URL('../native/worker.mjs',import.meta.url).pathname],bundle:true,write:false,format:'esm',platform:'neutral',external:['cloudflare:workers']});
+ const runtime=new Miniflare(convertV4MiniflareOptions({cf:false,modules:true,script:built.outputFiles[0].text,compatibilityDate:'2026-10-13',durableObjects:{SIGNER:{className:'Signer',useSQLite:true}},outboundService:()=>{throw Error('Unvalidated callbacks must not reach providers');}}));
+ const a='a'.repeat(43),b='b'.repeat(43),url=ORIGIN+'/github/callback?state='+a+'&code=synthetic-code';
+ try{
+   for(const cookie of ['__Host-signer-'+a+'='+a+'; __Host-signer-'+b+'='+b,'__Host-signer='+b+'; __Host-signer-'+a+'='+a,'__Host-signer='+a]){
+     const r=await runtime.dispatchFetch(url,{headers:{cookie}});
+     assert.equal((await r.json()).error,'state-denied','valid browser binding reaches the durable one-use state check');
+   }
+   for(const cookie of ['', '__Host-signer-'+b+'='+b, '__Host-signer-'+a+'='+b, '__Host-signer-'+a+'='+a+'; __Host-signer-'+a+'='+a]){
+     const r=await runtime.dispatchFetch(url,{headers:{cookie}});assert.deepEqual(await r.json(),{error:'callback-denied',reason:'cookie'});
+   }
+   for(const suffix of ['&state='+a,'&code=other-code','&unexpected=value']){
+     const r=await runtime.dispatchFetch(url+suffix,{headers:{cookie:'__Host-signer-'+a+'='+a}});assert.equal((await r.json()).error,'callback-denied');
+   }
+ }finally{await runtime.dispose();}
+});
