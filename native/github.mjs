@@ -2,10 +2,10 @@ import {OWNER, OWNER_ID, ORIGIN, encode, b64url, bounded, digest, fail, random} 
 import {seal, open} from './sealed.mjs';
 const VERSION = '2026-03-10';
 export function manifest() {
-  return {name:'signer',url:ORIGIN,public:false,description:'Remote Git commit signing',hook_attributes:{url:ORIGIN+'/github/events',active:false},redirect_url:ORIGIN+'/github/manifest',callback_urls:[ORIGIN+'/github/callback'],default_permissions:{git_signing_ssh_public_keys:'write'},default_events:[],request_oauth_on_install:false};
+  return {name:'signer-'+Array.from(crypto.getRandomValues(new Uint8Array(6)),byte=>byte.toString(16).padStart(2,'0')).join(''),url:ORIGIN,public:false,description:'Remote Git commit signing',hook_attributes:{url:ORIGIN+'/github/events',active:false},redirect_url:ORIGIN+'/github/manifest',callback_urls:[ORIGIN+'/github/callback'],default_permissions:{git_signing_ssh_public_keys:'write'},default_events:[],request_oauth_on_install:false};
 }
 export class GitHub {
-  constructor(storage, wrappingKey, fetcher = fetch) { this.storage=storage; this.key=wrappingKey; this.fetcher=fetcher; this.refreshing=null; }
+  constructor(storage, wrappingKey, fetcher = (...args) => fetch(...args)) { this.storage=storage; this.key=wrappingKey; this.fetcher=fetcher; this.refreshing=null; }
   async secret(name) { const envelope=await this.storage.get('sealed:'+name); return envelope ? open(this.key,name,envelope) : null; }
   async save(name, value) { await this.storage.put('sealed:'+name,await seal(this.key,name,value)); }
   async request(path, {method='GET',token,body,oauth=false} = {}) {

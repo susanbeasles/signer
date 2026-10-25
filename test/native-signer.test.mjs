@@ -38,7 +38,7 @@ test('commit framing rejects embedded signatures, injected headers, invalid iden
   for(const value of [commit.replace('tree ','gpgsig bad\ntree '),commit.replace('author ','encoding utf8\nauthor '),commit.replace(' +0000',' bad'),commit+'\0',commit.replace(/\n/g,'\r\n'),'x'.repeat(262145)])assert.throws(()=>commitBytes(value));
 });
 test('manifest requests only SSH signing-key administration with canonical callbacks',()=>{
-  const value=manifest();assert.deepEqual(value.default_permissions,{git_signing_ssh_public_keys:'write'});assert.equal(value.name,'signer');assert.equal(value.redirect_url,ORIGIN+'/github/manifest');assert.equal(value.public,false);
+  const value=manifest();assert.deepEqual(value.default_permissions,{git_signing_ssh_public_keys:'write'});assert.match(value.name,/^signer-[a-f0-9]{12}$/);assert.notEqual(value.name,manifest().name);assert.equal(value.redirect_url,ORIGIN+'/github/manifest');assert.equal(value.public,false);
 });
 test('credential envelopes authenticate their purpose and cannot be decrypted after tampering',async()=>{
   const key=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
